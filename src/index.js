@@ -79,7 +79,7 @@ app.post('/slack/events', async (req, res) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3006;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   

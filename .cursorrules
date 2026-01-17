@@ -1,0 +1,84 @@
+MANDATORY RULES FOR THIS PROJECT:
+
+LOCAL DEVELOPMENT SETUP:
+- Local server runs at http://localhost:3006
+- Use npm run dev for development with auto-reload
+- Use npm start for production mode
+- Environment variables in .env (copy from .env.example)
+- For testing Slack webhooks locally, use ngrok: ngrok http 3006
+- Production deployment is on Railway (auto-deploys from GitHub)
+- ALWAYS run npm run dev to test locally before considering any task complete
+- NEVER push code that hasn't been tested locally first
+
+CONFIRMATION AND EXPLANATION REQUIREMENTS:
+1. BEFORE making ANY code changes, you MUST:
+   - Explain WHAT you're going to change
+   - Explain WHY you're making the change
+   - Explain the IMPACT (what else might be affected)
+   - Ask for confirmation if the change affects multiple files or integrations
+
+2. For ANY change affecting:
+   - Slack integration → Explain what messages/responses are affected
+   - Google Calendar operations → Explain what calendar actions are affected
+   - Claude/Anthropic tools → Explain how AI behavior will change
+   - Conversation memory → Explain impact on conversation flow
+   - Daily summary → Explain what changes in the morning report
+
+3. ALWAYS ask "Is this what you want?" before:
+   - Modifying multiple files
+   - Changing Claude's tools or system prompt
+   - Altering API integrations (Slack, Google, Anthropic)
+   - Changing the conversation memory logic
+   - Modifying environment variable requirements
+
+ONLY CHANGE WHAT IS ASKED:
+- If user asks to change X, ONLY change X
+- Do NOT "improve" or "optimize" unrelated code
+- Do NOT refactor unless explicitly asked
+- Do NOT add features unless explicitly requested
+- If you see potential issues, EXPLAIN them but DON'T fix unless asked
+
+FORBIDDEN ACTIONS:
+- Making changes without understanding the full context
+- Quick edits without explaining impact
+- Making "helpful" changes the user didn't ask for
+- Refactoring code "while you're at it"
+- Adding new dependencies without explaining why
+- Changing Claude's personality/behavior without asking
+- Pushing code that hasn't been tested locally
+
+PROJECT DOCUMENTATION (READ THESE FIRST):
+- docs/PROJECT-STRUCTURE.md: File locations, architecture overview
+- docs/QUICK-REFERENCE.md: Common tasks, API reference, environment variables
+- docs/DEVELOPMENT-NOTES.md: Code patterns, testing, common issues
+- README.md: Setup instructions and usage
+
+PROJECT ARCHITECTURE:
+- src/index.js: Express server, Slack webhook handling, signature verification
+- src/bot.js: Claude integration with tool use, message processing
+- src/calendar.js: All Google Calendar operations (CRUD)
+- src/slack.js: Slack API message sending
+- src/memory.js: Conversation memory with TTL
+- src/scheduler.js: Daily summary cron job
+
+CALENDARS CONFIGURED:
+- Work (CALENDAR_WORK): tim@servicecore.com
+- Personal (CALENDAR_PERSONAL): primary
+- Northstar (CALENDAR_NORTHSTAR): tim@northstarroof.com
+
+TESTING REQUIREMENTS:
+1. ALWAYS run npm run dev after making changes
+2. Verify the server starts without errors on port 3006
+3. NEVER consider a task complete until local testing passes
+
+WHEN TO ASK VS WHEN TO ACT:
+ASK FIRST (require confirmation):
+- Changes affecting multiple files
+- Changes to Claude's tools or system prompt
+- API integration changes
+- Adding new features
+
+ACT DIRECTLY (but still explain):
+- Simple text changes
+- Single file bug fixes
+- Documentation updates
