@@ -1,5 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk');
-const { postSlackMessage, sendSlackMessage, deleteSlackMessage } = require('./slack');
+const { postSlackMessage, sendSlackMessage, deleteSlackMessage, getChannelHistory } = require('./slack');
 const { getConversation, addMessage } = require('./memory');
 const calendar = require('./calendar');
 
@@ -334,7 +334,33 @@ async function handleMessage(event) {
   }
   
   // Get conversation history
-  const history = getConversation(userId);
+  let history = getConversation(userId);
+  if (history.length === 0) {
+    try {
+      const slackMessages = await getChannelHistory(channel, 10);
+      const fallbackMessages = slackMessages
+        .filter(message => !message.subtype && message.text)
+        .map(message => {
+          if (message.bot_id) {
+            return { role: 'assistant', content: message.text };
+          }
+          if (message.user === process.env.ALLOWED_USER_ID) {
+            return { role: 'user', content: message.text };
+          }
+          return null;
+        })
+        .filter(Boolean)
+        .reverse();
+
+      for (const msg of fallbackMessages) {
+        addMessage(userId, msg.role, msg.content);
+      }
+
+      history = getConversation(userId);
+    } catch (error) {
+      console.error('Error fetching Slack history:', error);
+    }
+  }
   
   // Add user message to history
   addMessage(userId, 'user', userMessage);
