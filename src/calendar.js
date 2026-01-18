@@ -122,6 +122,14 @@ async function createEvent(calendarName, eventDetails) {
       timeZone: process.env.TIMEZONE || 'America/Denver'
     }
   };
+
+  if (Array.isArray(eventDetails.attendees) && eventDetails.attendees.length > 0) {
+    event.attendees = eventDetails.attendees.map(email => ({ email }));
+  }
+
+  if (eventDetails.reminders) {
+    event.reminders = eventDetails.reminders;
+  }
   
   if (eventDetails.color && COLORS[eventDetails.color.toLowerCase()]) {
     event.colorId = COLORS[eventDetails.color.toLowerCase()];

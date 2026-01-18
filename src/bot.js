@@ -88,6 +88,15 @@ const tools = [
         color: {
           type: "string",
           description: "Event color: blue, green, purple, red, yellow, orange, turquoise, gray (optional)"
+        },
+        attendees: {
+          type: "array",
+          items: { type: "string" },
+          description: "Attendee emails to invite (optional, follow-ups only)"
+        },
+        is_followup: {
+          type: "boolean",
+          description: "Set true for follow-up calls to add invites/reminders and format title"
         }
       },
       required: ["calendar", "title", "start_time", "end_time"]
@@ -236,13 +245,38 @@ async function executeTool(toolName, toolInput, context = {}) {
         return await calendar.getNextEvent();
       
       case 'create_event':
-        const detected = applyPrefixAndColor(toolInput.title, context.userMessage);
+        const isFollowUp = Boolean(toolInput.is_followup);
+        const topic = (toolInput.title || '').trim();
+        let baseTitle = toolInput.title;
+        let description = toolInput.description;
+        let reminders = null;
+        let attendees = null;
+
+        if (isFollowUp) {
+          const followUpTopic = topic || 'Follow Up';
+          baseTitle = `Phone Call - ${followUpTopic}`;
+          if (!description) {
+            description = `I will call you at this time to discuss ${followUpTopic}.`;
+          }
+          reminders = {
+            useDefault: false,
+            overrides: [
+              { method: 'email', minutes: 30 },
+              { method: 'popup', minutes: 10 }
+            ]
+          };
+          attendees = Array.isArray(toolInput.attendees) ? toolInput.attendees : null;
+        }
+
+        const detected = applyPrefixAndColor(baseTitle, context.userMessage);
         return await calendar.createEvent('northstar', {
           title: detected.title,
           startTime: toolInput.start_time,
           endTime: toolInput.end_time,
-          description: toolInput.description,
-          color: detected.color
+          description: description,
+          color: detected.color,
+          attendees: attendees,
+          reminders: reminders
         });
       
       case 'update_event':
@@ -302,6 +336,13 @@ Everything goes on Northstar. Apply these automatically:
 - Work/ServiceCore/Docket/SC mentioned → "SC - " prefix + yellow
 - Personal mentioned → "P - " prefix + green
 - Everything else → no prefix + blue
+
+Follow-up calls:
+- Detect follow-ups from "follow up", "call with", a specific person, or an email
+- Set is_followup true and include attendees (email list)
+- Format title as "Phone Call - [topic]"
+- Description: "I will call you at this time to discuss [topic]."
+- Reminders: email 30 min before, popup 10 min before
 
 ## WHEN MOVING EVENTS
 
