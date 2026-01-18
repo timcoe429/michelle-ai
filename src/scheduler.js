@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const { sendSlackMessage } = require('./slack');
-const { listAllCalendarsEvents } = require('./calendar');
+const { listEvents, createEvent, eventsMatchByTitleAndTime } = require('./calendar');
 
 function formatTime(isoString) {
   if (!isoString) return 'All day';
@@ -19,6 +19,16 @@ function formatEventList(events) {
     return '  _No events scheduled_';
   }
   
+  return events.map(event => {
+    const time = formatTime(event.start);
+    return `  • ${time} - ${event.title}`;
+  }).join('\n');
+}
+
+function formatSyncedList(events) {
+  if (!events || events.length === 0) {
+    return '  _No new events synced_';
+  }
   return events.map(event => {
     const time = formatTime(event.start);
     return `  • ${time} - ${event.title}`;
@@ -46,10 +56,29 @@ async function sendDailySummary() {
     const endOfDay = new Date(startOfDay);
     endOfDay.setHours(23, 59, 59, 999);
     
-    const events = await listAllCalendarsEvents(
-      startOfDay.toISOString(),
-      endOfDay.toISOString()
-    );
+    const workEvents = await listEvents('work', startOfDay.toISOString(), endOfDay.toISOString());
+    const northstarEvents = await listEvents('northstar', startOfDay.toISOString(), endOfDay.toISOString());
+
+    const syncedEvents = [];
+    for (const workEvent of workEvents) {
+      const exists = northstarEvents.some(northstarEvent =>
+        eventsMatchByTitleAndTime(workEvent, northstarEvent)
+      );
+      if (!exists) {
+        try {
+          await createEvent('northstar', {
+            title: workEvent.title,
+            startTime: workEvent.start,
+            endTime: workEvent.end,
+            description: 'Cloned from Work calendar',
+            color: 'yellow'
+          });
+          syncedEvents.push(workEvent);
+        } catch (error) {
+          console.error('Error syncing Work event to Northstar:', error);
+        }
+      }
+    }
     
     // Format the summary
     const dateStr = now.toLocaleDateString('en-US', {
@@ -62,9 +91,9 @@ async function sendDailySummary() {
     
     let summary = `📅 *Daily Summary for ${dateStr}*\n\n`;
     
-    summary += `*🏢 Work Calendar:*\n${formatEventList(events.work)}\n\n`;
-    summary += `*👤 Personal Calendar:*\n${formatEventList(events.personal)}\n\n`;
-    summary += `*🏠 Northstar Calendar:*\n${formatEventList(events.northstar)}`;
+    summary += `*🏢 Work Calendar:*\n${formatEventList(workEvents)}\n\n`;
+    summary += `*🏠 Northstar Calendar:*\n${formatEventList(northstarEvents)}\n\n`;
+    summary += `📋 I also synced these from your Work calendar:\n${formatSyncedList(syncedEvents)}`;
     
     await sendSlackMessage(channelId, summary);
     console.log('Daily summary sent successfully');

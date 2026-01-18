@@ -3,7 +3,6 @@ const { google } = require('googleapis');
 // Calendar name mapping
 const CALENDARS = {
   work: process.env.CALENDAR_WORK || 'primary',
-  personal: process.env.CALENDAR_PERSONAL || 'primary',
   northstar: process.env.CALENDAR_NORTHSTAR || 'primary'
 };
 
@@ -37,21 +36,19 @@ function getCalendarClient() {
 
 function resolveCalendarId(calendarName) {
   const name = calendarName.toLowerCase();
-  if (name.includes('work') || name.includes('service')) {
+  if (name.includes('work') || name.includes('service') || name.includes('docket') || name.includes('sc')) {
     return CALENDARS.work;
   } else if (name.includes('northstar') || name.includes('roofing')) {
     return CALENDARS.northstar;
-  } else if (name.includes('personal') || name.includes('tim coe')) {
-    return CALENDARS.personal;
   }
-  // Default to personal
-  return CALENDARS.personal;
+  // Default to northstar
+  return CALENDARS.northstar;
 }
 
 function getCalendarDisplayName(calendarId) {
   if (calendarId === CALENDARS.work) return 'Work';
   if (calendarId === CALENDARS.northstar) return 'Northstar';
-  return 'Personal';
+  return 'Northstar';
 }
 
 async function listEvents(calendarName, timeMin, timeMax) {
@@ -274,6 +271,14 @@ async function getNextEvent() {
   };
 }
 
+function eventsMatchByTitleAndTime(eventA, eventB) {
+  if (!eventA || !eventB) return false;
+  const titleMatch = (eventA.title || '') === (eventB.title || '');
+  const startMatch = String(eventA.start || '') === String(eventB.start || '');
+  const endMatch = String(eventA.end || '') === String(eventB.end || '');
+  return titleMatch && startMatch && endMatch;
+}
+
 module.exports = {
   listEvents,
   listAllCalendarsEvents,
@@ -282,5 +287,6 @@ module.exports = {
   deleteEvent,
   findEvent,
   getNextEvent,
+  eventsMatchByTitleAndTime,
   CALENDARS
 };

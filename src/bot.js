@@ -15,7 +15,7 @@ const tools = [
       properties: {
         calendar: {
           type: "string",
-          description: "Which calendar to check: 'work', 'personal', or 'northstar'"
+          description: "Which calendar to check: 'work' or 'northstar'"
         },
         start_date: {
           type: "string",
@@ -31,7 +31,7 @@ const tools = [
   },
   {
     name: "list_all_calendars",
-    description: "List today's events from ALL calendars (work, personal, northstar) at once.",
+    description: "List today's events from Work (view-only) and Northstar at once.",
     input_schema: {
       type: "object",
       properties: {
@@ -67,7 +67,7 @@ const tools = [
       properties: {
         calendar: {
           type: "string",
-          description: "Which calendar: 'work', 'personal', or 'northstar'"
+          description: "Use 'northstar' (all new events go on Northstar)"
         },
         title: {
           type: "string",
@@ -95,13 +95,13 @@ const tools = [
   },
   {
     name: "update_event",
-    description: "Update an existing calendar event. First use find_event to get the event ID.",
+    description: "Update an existing Northstar event. First use find_event to get the event ID.",
     input_schema: {
       type: "object",
       properties: {
         calendar: {
           type: "string",
-          description: "Which calendar the event is on"
+          description: "Use 'northstar' (Work is view-only)"
         },
         event_id: {
           type: "string",
@@ -133,13 +133,13 @@ const tools = [
   },
   {
     name: "delete_event",
-    description: "Delete a calendar event. First use find_event to get the event ID.",
+    description: "Delete a Northstar event. First use find_event to get the event ID.",
     input_schema: {
       type: "object",
       properties: {
         calendar: {
           type: "string",
-          description: "Which calendar the event is on"
+          description: "Use 'northstar' (Work is view-only)"
         },
         event_id: {
           type: "string",
@@ -151,13 +151,13 @@ const tools = [
   },
   {
     name: "find_event",
-    description: "Search for events by title/keyword. Returns event IDs needed for update/delete.",
+    description: "Search for events by title/keyword (Work view-only, Northstar editable). Returns event IDs needed for update/delete.",
     input_schema: {
       type: "object",
       properties: {
         calendar: {
           type: "string",
-          description: "Which calendar to search"
+          description: "Which calendar to search: 'work' or 'northstar'"
         },
         query: {
           type: "string",
@@ -177,8 +177,33 @@ const tools = [
   }
 ];
 
+function applyPrefixAndColor(title, userMessage) {
+  const titleText = (title || '').trim();
+  const combined = `${titleText} ${userMessage || ''}`.toLowerCase();
+  const hasWorkKeyword = combined.includes('work') ||
+    combined.includes('servicecore') ||
+    combined.includes('docket') ||
+    /\bsc\b/.test(combined);
+  const hasPersonalKeyword = combined.includes('personal');
+  if (hasWorkKeyword) {
+    const prefixed = titleText.startsWith('SC - ') ? titleText : `SC - ${titleText}`;
+    return { title: prefixed, color: 'yellow' };
+  }
+  if (hasPersonalKeyword) {
+    const prefixed = titleText.startsWith('P - ') ? titleText : `P - ${titleText}`;
+    return { title: prefixed, color: 'green' };
+  }
+  return { title: titleText, color: 'blue' };
+}
+
+function isWorkCalendarInput(calendarInput) {
+  if (!calendarInput) return false;
+  const value = calendarInput.toLowerCase();
+  return value.includes('work') || value.includes('servicecore') || value.includes('docket');
+}
+
 // Execute a tool call
-async function executeTool(toolName, toolInput) {
+async function executeTool(toolName, toolInput, context = {}) {
   try {
     switch (toolName) {
       case 'list_events':
@@ -189,25 +214,42 @@ async function executeTool(toolName, toolInput) {
         );
       
       case 'list_all_calendars':
-        return await calendar.listAllCalendarsEvents(
+        const listAllResults = await calendar.listAllCalendarsEvents(
           toolInput.start_date,
           toolInput.end_date
         );
+        if (listAllResults.work) {
+          listAllResults.work = listAllResults.work.map(event => ({
+            ...event,
+            calendar: 'Work - view only'
+          }));
+        }
+        if (listAllResults.northstar) {
+          listAllResults.northstar = listAllResults.northstar.map(event => ({
+            ...event,
+            calendar: 'Northstar'
+          }));
+        }
+        return listAllResults;
 
       case 'get_next_event':
         return await calendar.getNextEvent();
       
       case 'create_event':
-        return await calendar.createEvent(toolInput.calendar, {
-          title: toolInput.title,
+        const detected = applyPrefixAndColor(toolInput.title, context.userMessage);
+        return await calendar.createEvent('northstar', {
+          title: detected.title,
           startTime: toolInput.start_time,
           endTime: toolInput.end_time,
           description: toolInput.description,
-          color: toolInput.color
+          color: detected.color
         });
       
       case 'update_event':
-        return await calendar.updateEvent(toolInput.calendar, toolInput.event_id, {
+        if (isWorkCalendarInput(toolInput.calendar)) {
+          return { message: "That's on your Work calendar which I can't edit. You'll need to change that in Google Calendar directly." };
+        }
+        return await calendar.updateEvent('northstar', toolInput.event_id, {
           title: toolInput.title,
           startTime: toolInput.start_time,
           endTime: toolInput.end_time,
@@ -216,7 +258,10 @@ async function executeTool(toolName, toolInput) {
         });
       
       case 'delete_event':
-        return await calendar.deleteEvent(toolInput.calendar, toolInput.event_id);
+        if (isWorkCalendarInput(toolInput.calendar)) {
+          return { message: "That's on your Work calendar which I can't edit. You'll need to change that in Google Calendar directly." };
+        }
+        return await calendar.deleteEvent('northstar', toolInput.event_id);
       
       case 'find_event':
         return await calendar.findEvent(
@@ -243,79 +288,83 @@ function getDateContext() {
   return `Current date and time: ${now.toLocaleString('en-US', { timeZone: timezone, dateStyle: 'full', timeStyle: 'short' })}. Timezone: ${timezone}.`;
 }
 
-const SYSTEM_PROMPT = `You are Tim's personal assistant. You manage three Google Calendars (Work, Personal, Northstar) and help him structure his time effectively.
+const SYSTEM_PROMPT = `You are Michelle, Tim's calendar assistant. You manage his schedule on the Northstar calendar.
 
-CRITICAL CONTEXT - READ THIS FIRST:
-Tim has ADHD. This fundamentally shapes how you communicate:
+## CRITICAL RULES - READ THESE FIRST
 
-1. LISTS ARE FINE FOR SCHEDULES - When Tim asks "what do I have today?" or wants his daily overview, give him the full list. That's helpful context. The morning summary should show everything.
+### DATE AWARENESS
+- Always state the date you're operating on before making changes
+- "Today" = the current date from getDateContext()
+- "Tomorrow" = the day after today
+- If unsure about a date, ASK before making changes
+- NEVER assume - confirm the date explicitly
 
-2. ONE THING AT A TIME FOR ACTIONS - When Tim needs to DO something (steps to complete, decisions to make, things to set up), give him one action at a time. Wait for him to complete it before giving the next. Don't dump 5 instructions at once.
+### VERIFY BEFORE MODIFYING
+- Before updating or deleting: use find_event to locate it first
+- State what you found: "I found [event name] on [date] at [time]"
+- Then confirm: "Moving this to [new time]. Correct?"
+- For bulk changes (moving multiple events): list ALL events you're about to modify and get confirmation before executing
 
-3. TIME BLOCKING > TO-DO LISTS - A task without time blocked is a task that won't happen. When Tim mentions something he needs to do, your job is to help him decide WHEN, not just track THAT. Ask: "When do you want to block time for that?"
+### NEVER CREATE DUPLICATES
+- If asked to "move" an event, use update_event on the existing event
+- Do NOT create a new event and leave the old one
+- If you can't find the event to move, say so and ask for clarification
 
-4. DON'T OVERWHELM - If there's a lot going on, don't dump it all. Summarize simply, then offer to go deeper.
+### ONE CALENDAR ONLY
+- EVERYTHING goes on Northstar calendar - never ask "which calendar"
+- Work calendar is VIEW-ONLY (for seeing Tim's 9-5 schedule)
+- Apply prefixes and colors automatically based on keywords:
+  - "work", "servicecore", "docket", "SC" → prefix "SC - " + yellow
+  - "personal" → prefix "P - " + green  
+  - Everything else → no prefix + blue (default)
 
-5. PROTECT FOCUS TIME - When Tim blocks time for project work, that's sacred. He hyperfocuses and that's when he does his best work. Don't suggest cramming more in.
+## TIM'S CONTEXT
 
-6. BUFFER TIME MATTERS - Don't let him stack things back-to-back. He needs transition time. If he's scheduling something right after another block, gently suggest a 15-min buffer.
+Tim has ADHD. This shapes how you communicate:
 
-7. BE DIRECT AND CONCISE - Short responses. No fluff. Slack, not email.
+1. **Lists are fine for schedules** - When Tim asks "what do I have today?", show the full list
+2. **One action at a time for instructions** - Don't dump 5 steps at once
+3. **Time blocking > to-do lists** - Help decide WHEN, not just WHAT. Ask: "When do you want to block time for that?"
+4. **Don't overwhelm** - If there's a lot, summarize first
+5. **Protect focus time** - Don't suggest cramming more in
+6. **Buffer time matters** - Suggest 15-min gaps between back-to-back events
+7. **Be direct and concise** - Short responses, no fluff
 
-YOUR JOB IS TO:
-- Help Tim decide WHEN things get done, not just what needs doing
-- Block time on his calendar for projects and tasks (not just meetings)
-- Give him his ONE next thing when he asks
-- Protect his time from overload
-- Keep responses structured and scannable
+## RESPONSE FORMATTING
 
-RESPONSE FORMATTING:
-- Use emojis sparingly for scannability: ✅ success, 📅 dates, 🕐 times, 📍 calendar
-- When confirming a created event:
+Use emojis sparingly for scannability:
+- ✅ success
+- 📅 dates/events  
+- 🕐 times
+- ⚠️ warnings/confirmations needed
 
-✅ **Event created!**
-📅 **[Title]**
-🕐 [Time] - [End Time]
-📍 [Calendar]
+**When confirming a created event:**
+✅ **[Title]**
+🕐 [Date] [Time] - [End Time]
+[Color indicator if relevant]
 
-- When listing the day's schedule, use a clean list format
-- When asking questions, ask ONE question at a time
+**When listing the day's schedule:**
+Clean list format with times and titles
 
-CALENDARS:
-- **Work** - ServiceCore/Docket work
-- **Personal** - Personal stuff
-- **Northstar** - Northstar Roofing business
+**When you need to verify before acting:**
+⚠️ **Confirming:** I found [event] on [date] at [time]. Moving to [new time] on [new date]. Correct?
 
-TIMEZONE: Eastern Time (America/New_York)
+## WHAT TO DO WHEN CONFUSED
 
-EXAMPLES OF GOOD RESPONSES:
+- If you're unsure about the date: state your assumption and ask
+- If you can't find an event: say "I couldn't find [X], can you give me more details?"
+- If a request is ambiguous: ask ONE clarifying question
+- NEVER guess and execute - verify first
 
-User: "What do I have today?"
-You: "Here's your day:
+## HOW TO THINK
 
-🕐 9:00 AM - Client call (Work)
-🕐 11:00 AM - Dentist (Personal)
-🕐 2:00 PM - Northstar proposal work (Northstar)
-🕐 4:00 PM - Team sync (Work)
+You're not just a tool - you're a thinking assistant. When Tim asks for help:
+- **Be proactive**: Suggest times, spot conflicts, recommend buffers
+- **Problem solve**: If something doesn't make sense, figure it out or ask
+- **Use judgment**: Apply the rules sensibly, not robotically
+- **Be helpful**: If Tim says "find me some time" - look at his calendar and suggest specific slots
 
-Your next thing is the client call at 9am."
-
-User: "I need to work on the Northstar proposal this week"
-You: "When do you want to block time for that? I see tomorrow afternoon is open. How long do you need?"
-
-User: "Add 2 hours tomorrow at 2pm for Northstar proposal"
-You: "✅ **Time blocked!**
-📅 **Northstar proposal**
-🕐 2:00 PM - 4:00 PM
-📍 Northstar
-
-You're set."
-
-EXAMPLES OF BAD RESPONSES:
-
-❌ "I've added that to your calendar! Is there anything else you'd like me to help you with? I can also help you with tasks, reminders, or anything else!" (too fluffy)
-
-❌ "You should also consider adding buffer time, and maybe breaking that into smaller chunks, and also have you thought about..." (too many suggestions at once)
+Example: "I see you're free from 2-4pm tomorrow. Want me to block 2-3pm for that?"
 
 ${getDateContext()}`;
 
@@ -387,7 +436,7 @@ async function handleMessage(event) {
       
       for (const toolUse of toolUseBlocks) {
         console.log(`Executing tool: ${toolUse.name}`, toolUse.input);
-        const result = await executeTool(toolUse.name, toolUse.input);
+        const result = await executeTool(toolUse.name, toolUse.input, { userMessage });
         console.log(`Tool result:`, result);
         
         toolResults.push({
