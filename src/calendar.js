@@ -227,6 +227,53 @@ async function findEvent(calendarName, searchQuery, timeMin, timeMax) {
   }));
 }
 
+async function getNextEvent() {
+  const now = new Date();
+  const endOfDay = new Date(now);
+  endOfDay.setHours(23, 59, 59, 999);
+  
+  let allEvents = [];
+  
+  for (const [name, calendarId] of Object.entries(CALENDARS)) {
+    try {
+      const calendar = getCalendarClient();
+      const response = await calendar.events.list({
+        calendarId,
+        timeMin: now.toISOString(),
+        timeMax: endOfDay.toISOString(),
+        singleEvents: true,
+        orderBy: 'startTime',
+        maxResults: 5
+      });
+      
+      const events = response.data.items.map(event => ({
+        id: event.id,
+        title: event.summary,
+        description: event.description,
+        start: event.start.dateTime || event.start.date,
+        end: event.end.dateTime || event.end.date,
+        calendar: getCalendarDisplayName(calendarId)
+      }));
+      
+      allEvents = allEvents.concat(events);
+    } catch (error) {
+      console.error(`Error fetching ${name} calendar:`, error.message);
+    }
+  }
+  
+  // Sort by start time and return the first one
+  allEvents.sort((a, b) => new Date(a.start) - new Date(b.start));
+  
+  if (allEvents.length === 0) {
+    return { message: "Nothing scheduled for the rest of today." };
+  }
+  
+  return {
+    next: allEvents[0],
+    remaining_count: allEvents.length - 1
+  };
+}
+
 module.exports = {
   listEvents,
   listAllCalendarsEvents,
@@ -234,5 +281,6 @@ module.exports = {
   updateEvent,
   deleteEvent,
   findEvent,
+  getNextEvent,
   CALENDARS
 };
