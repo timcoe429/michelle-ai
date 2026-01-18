@@ -1,5 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk');
-const { sendSlackMessage } = require('./slack');
+const { postSlackMessage, sendSlackMessage, deleteSlackMessage } = require('./slack');
 const { getConversation, addMessage } = require('./memory');
 const calendar = require('./calendar');
 
@@ -325,6 +325,13 @@ async function handleMessage(event) {
   const channel = event.channel;
   
   console.log(`Message from ${userId}: ${userMessage}`);
+
+  let thinkingTs = null;
+  try {
+    thinkingTs = await postSlackMessage(channel, '_thinking..._');
+  } catch (error) {
+    console.error('Error sending thinking indicator:', error);
+  }
   
   // Get conversation history
   const history = getConversation(userId);
@@ -383,12 +390,27 @@ async function handleMessage(event) {
     
     // Add assistant response to history
     addMessage(userId, 'assistant', replyText);
+
+    if (thinkingTs) {
+      try {
+        await deleteSlackMessage(channel, thinkingTs);
+      } catch (error) {
+        console.error('Error deleting thinking indicator:', error);
+      }
+    }
     
     // Send response to Slack
     await sendSlackMessage(channel, replyText);
     
   } catch (error) {
     console.error('Error processing message:', error);
+    if (thinkingTs) {
+      try {
+        await deleteSlackMessage(channel, thinkingTs);
+      } catch (deleteError) {
+        console.error('Error deleting thinking indicator:', deleteError);
+      }
+    }
     await sendSlackMessage(channel, "Sorry, I encountered an error processing your request. Please try again.");
   }
 }
