@@ -203,10 +203,13 @@ async function deleteEvent(calendarName, eventId) {
 async function findEvent(calendarName, searchQuery, timeMin, timeMax) {
   const calendar = getCalendarClient();
   const calendarId = resolveCalendarId(calendarName);
+  const now = new Date();
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
   
   const response = await calendar.events.list({
     calendarId,
-    timeMin: timeMin || new Date().toISOString(),
+    timeMin: timeMin || startOfToday.toISOString(),
     timeMax: timeMax || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     singleEvents: true,
     orderBy: 'startTime',
