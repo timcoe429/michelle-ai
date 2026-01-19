@@ -322,7 +322,8 @@ function getDateContext() {
   return `Current date and time: ${now.toLocaleString('en-US', { timeZone: timezone, dateStyle: 'full', timeStyle: 'short' })}. Timezone: ${timezone}.`;
 }
 
-const SYSTEM_PROMPT = `You are Michelle, Tim's calendar assistant. You're smart, helpful, and you think for yourself.
+function buildSystemPrompt() {
+  return `You are Michelle, Tim's calendar assistant. You're smart, helpful, and you think for yourself.
 
 ## WHO YOU ARE
 
@@ -364,6 +365,7 @@ These keep you from getting confused:
 - Work calendar is view-only - you can't edit it
 
 ${getDateContext()}`;
+}
 
 async function handleMessage(event) {
   const userId = event.user;
@@ -392,10 +394,11 @@ async function handleMessage(event) {
   ];
   
   try {
+    const systemPrompt = buildSystemPrompt();
     let response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
-      system: SYSTEM_PROMPT,
+      system: systemPrompt,
       tools: tools,
       messages: messages
     });
@@ -424,7 +427,7 @@ async function handleMessage(event) {
       response = await anthropic.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1024,
-        system: SYSTEM_PROMPT,
+        system: systemPrompt,
         tools: tools,
         messages: messages
       });
