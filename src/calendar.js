@@ -2,9 +2,9 @@ const { google } = require('googleapis');
 
 // Calendar name mapping
 const CALENDARS = {
-  work: process.env.CALENDAR_WORK || 'primary',
   northstar: process.env.CALENDAR_NORTHSTAR || 'primary'
 };
+const CALENDAR_DISPLAY_NAME = 'Northstar';
 
 // Color mapping (Google Calendar color IDs)
 const COLORS = {
@@ -34,26 +34,13 @@ function getCalendarClient() {
   return google.calendar({ version: 'v3', auth: oauth2Client });
 }
 
-function resolveCalendarId(calendarName) {
-  const name = calendarName.toLowerCase();
-  if (name.includes('work') || name.includes('service') || name.includes('docket') || name.includes('sc')) {
-    return CALENDARS.work;
-  } else if (name.includes('northstar') || name.includes('roofing')) {
-    return CALENDARS.northstar;
-  }
-  // Default to northstar
+function resolveCalendarId() {
   return CALENDARS.northstar;
 }
 
-function getCalendarDisplayName(calendarId) {
-  if (calendarId === CALENDARS.work) return 'Work';
-  if (calendarId === CALENDARS.northstar) return 'Northstar';
-  return 'Northstar';
-}
-
-async function listEvents(calendarName, timeMin, timeMax) {
+async function listEvents(timeMin, timeMax) {
   const calendar = getCalendarClient();
-  const calendarId = resolveCalendarId(calendarName);
+  const calendarId = resolveCalendarId();
   
   const response = await calendar.events.list({
     calendarId,
@@ -70,45 +57,14 @@ async function listEvents(calendarName, timeMin, timeMax) {
     description: event.description,
     start: event.start.dateTime || event.start.date,
     end: event.end.dateTime || event.end.date,
-    calendar: getCalendarDisplayName(calendarId),
+    calendar: CALENDAR_DISPLAY_NAME,
     color: event.colorId
   }));
 }
 
-async function listAllCalendarsEvents(timeMin, timeMax) {
-  const results = {};
-  
-  for (const [name, calendarId] of Object.entries(CALENDARS)) {
-    try {
-      const calendar = getCalendarClient();
-      const response = await calendar.events.list({
-        calendarId,
-        timeMin: timeMin || new Date().toISOString(),
-        timeMax: timeMax || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        singleEvents: true,
-        orderBy: 'startTime',
-        maxResults: 20
-      });
-      
-      results[name] = response.data.items.map(event => ({
-        id: event.id,
-        title: event.summary,
-        description: event.description,
-        start: event.start.dateTime || event.start.date,
-        end: event.end.dateTime || event.end.date
-      }));
-    } catch (error) {
-      console.error(`Error fetching ${name} calendar:`, error.message);
-      results[name] = [];
-    }
-  }
-  
-  return results;
-}
-
-async function createEvent(calendarName, eventDetails) {
+async function createEvent(eventDetails) {
   const calendar = getCalendarClient();
-  const calendarId = resolveCalendarId(calendarName);
+  const calendarId = resolveCalendarId();
   
   const event = {
     summary: eventDetails.title,
@@ -145,14 +101,14 @@ async function createEvent(calendarName, eventDetails) {
     title: response.data.summary,
     start: response.data.start.dateTime,
     end: response.data.end.dateTime,
-    calendar: getCalendarDisplayName(calendarId),
+    calendar: CALENDAR_DISPLAY_NAME,
     link: response.data.htmlLink
   };
 }
 
-async function updateEvent(calendarName, eventId, updates) {
+async function updateEvent(eventId, updates) {
   const calendar = getCalendarClient();
-  const calendarId = resolveCalendarId(calendarName);
+  const calendarId = resolveCalendarId();
   
   // First get the existing event
   const existing = await calendar.events.get({
@@ -192,25 +148,25 @@ async function updateEvent(calendarName, eventId, updates) {
     title: response.data.summary,
     start: response.data.start.dateTime,
     end: response.data.end.dateTime,
-    calendar: getCalendarDisplayName(calendarId)
+    calendar: CALENDAR_DISPLAY_NAME
   };
 }
 
-async function deleteEvent(calendarName, eventId) {
+async function deleteEvent(eventId) {
   const calendar = getCalendarClient();
-  const calendarId = resolveCalendarId(calendarName);
+  const calendarId = resolveCalendarId();
   
   await calendar.events.delete({
     calendarId,
     eventId
   });
   
-  return { success: true, calendar: getCalendarDisplayName(calendarId) };
+  return { success: true, calendar: CALENDAR_DISPLAY_NAME };
 }
 
-async function findEvent(calendarName, searchQuery, timeMin, timeMax) {
+async function findEvent(searchQuery, timeMin, timeMax) {
   const calendar = getCalendarClient();
-  const calendarId = resolveCalendarId(calendarName);
+  const calendarId = resolveCalendarId();
   const now = new Date();
   const startOfToday = new Date(now);
   startOfToday.setHours(0, 0, 0, 0);
@@ -231,7 +187,7 @@ async function findEvent(calendarName, searchQuery, timeMin, timeMax) {
     description: event.description,
     start: event.start.dateTime || event.start.date,
     end: event.end.dateTime || event.end.date,
-    calendar: getCalendarDisplayName(calendarId)
+    calendar: CALENDAR_DISPLAY_NAME
   }));
 }
 
@@ -240,33 +196,30 @@ async function getNextEvent() {
   const endOfDay = new Date(now);
   endOfDay.setHours(23, 59, 59, 999);
   
+  const calendarId = resolveCalendarId();
   let allEvents = [];
   
-  for (const [name, calendarId] of Object.entries(CALENDARS)) {
-    try {
-      const calendar = getCalendarClient();
-      const response = await calendar.events.list({
-        calendarId,
-        timeMin: now.toISOString(),
-        timeMax: endOfDay.toISOString(),
-        singleEvents: true,
-        orderBy: 'startTime',
-        maxResults: 5
-      });
-      
-      const events = response.data.items.map(event => ({
-        id: event.id,
-        title: event.summary,
-        description: event.description,
-        start: event.start.dateTime || event.start.date,
-        end: event.end.dateTime || event.end.date,
-        calendar: getCalendarDisplayName(calendarId)
-      }));
-      
-      allEvents = allEvents.concat(events);
-    } catch (error) {
-      console.error(`Error fetching ${name} calendar:`, error.message);
-    }
+  try {
+    const calendar = getCalendarClient();
+    const response = await calendar.events.list({
+      calendarId,
+      timeMin: now.toISOString(),
+      timeMax: endOfDay.toISOString(),
+      singleEvents: true,
+      orderBy: 'startTime',
+      maxResults: 5
+    });
+    
+    allEvents = response.data.items.map(event => ({
+      id: event.id,
+      title: event.summary,
+      description: event.description,
+      start: event.start.dateTime || event.start.date,
+      end: event.end.dateTime || event.end.date,
+      calendar: CALENDAR_DISPLAY_NAME
+    }));
+  } catch (error) {
+    console.error('Error fetching Northstar calendar:', error.message);
   }
   
   // Sort by start time and return the first one
@@ -292,7 +245,6 @@ function eventsMatchByTitleAndTime(eventA, eventB) {
 
 module.exports = {
   listEvents,
-  listAllCalendarsEvents,
   createEvent,
   updateEvent,
   deleteEvent,

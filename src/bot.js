@@ -9,14 +9,10 @@ const anthropic = new Anthropic();
 const tools = [
   {
     name: "list_events",
-    description: "List events from a calendar. Use this to see what's scheduled.",
+    description: "List events from Northstar. Use this to see what's scheduled.",
     input_schema: {
       type: "object",
       properties: {
-        calendar: {
-          type: "string",
-          description: "Which calendar to check: 'work' or 'northstar'"
-        },
         start_date: {
           type: "string",
           description: "Start date/time in ISO format (e.g., '2024-01-15T00:00:00'). Defaults to now."
@@ -25,30 +21,12 @@ const tools = [
           type: "string",
           description: "End date/time in ISO format. Defaults to 7 days from now."
         }
-      },
-      required: ["calendar"]
-    }
-  },
-  {
-    name: "list_all_calendars",
-    description: "List today's events from Work (view-only) and Northstar at once.",
-    input_schema: {
-      type: "object",
-      properties: {
-        start_date: {
-          type: "string",
-          description: "Start date/time in ISO format. Defaults to now."
-        },
-        end_date: {
-          type: "string",
-          description: "End date/time in ISO format. Defaults to end of today."
-        }
       }
     }
   },
   {
     name: "get_next_event",
-    description: "Get the single next upcoming event across all calendars. Use this when user asks 'what's next' or 'what do I have coming up'.",
+    description: "Get the single next upcoming event. Use this when user asks 'what's next' or 'what do I have coming up'.",
     input_schema: {
       type: "object",
       properties: {
@@ -65,10 +43,6 @@ const tools = [
     input_schema: {
       type: "object",
       properties: {
-        calendar: {
-          type: "string",
-          description: "Use 'northstar' (all new events go on Northstar)"
-        },
         title: {
           type: "string",
           description: "Event title"
@@ -99,7 +73,7 @@ const tools = [
           description: "Set true for follow-up calls to add invites/reminders and format title"
         }
       },
-      required: ["calendar", "title", "start_time", "end_time"]
+      required: ["title", "start_time", "end_time"]
     }
   },
   {
@@ -108,10 +82,6 @@ const tools = [
     input_schema: {
       type: "object",
       properties: {
-        calendar: {
-          type: "string",
-          description: "Use 'northstar' (Work is view-only)"
-        },
         event_id: {
           type: "string",
           description: "The event ID to update"
@@ -137,7 +107,7 @@ const tools = [
           description: "New color (optional)"
         }
       },
-      required: ["calendar", "event_id"]
+      required: ["event_id"]
     }
   },
   {
@@ -146,28 +116,20 @@ const tools = [
     input_schema: {
       type: "object",
       properties: {
-        calendar: {
-          type: "string",
-          description: "Use 'northstar' (Work is view-only)"
-        },
         event_id: {
           type: "string",
           description: "The event ID to delete"
         }
       },
-      required: ["calendar", "event_id"]
+      required: ["event_id"]
     }
   },
   {
     name: "find_event",
-    description: "Search for events by title/keyword (Work view-only, Northstar editable). Returns event IDs needed for update/delete.",
+    description: "Search for events by title/keyword. Returns event IDs needed for update/delete.",
     input_schema: {
       type: "object",
       properties: {
-        calendar: {
-          type: "string",
-          description: "Which calendar to search: 'work' or 'northstar'"
-        },
         query: {
           type: "string",
           description: "Search term to find in event titles"
@@ -181,7 +143,7 @@ const tools = [
           description: "End of search range (ISO format). Defaults to 30 days from now."
         }
       },
-      required: ["calendar", "query"]
+      required: ["query"]
     }
   }
 ];
@@ -205,41 +167,15 @@ function applyPrefixAndColor(title, userMessage) {
   return { title: titleText, color: 'blue' };
 }
 
-function isWorkCalendarInput(calendarInput) {
-  if (!calendarInput) return false;
-  const value = calendarInput.toLowerCase();
-  return value.includes('work') || value.includes('servicecore') || value.includes('docket');
-}
-
 // Execute a tool call
 async function executeTool(toolName, toolInput, context = {}) {
   try {
     switch (toolName) {
       case 'list_events':
         return await calendar.listEvents(
-          toolInput.calendar,
           toolInput.start_date,
           toolInput.end_date
         );
-      
-      case 'list_all_calendars':
-        const listAllResults = await calendar.listAllCalendarsEvents(
-          toolInput.start_date,
-          toolInput.end_date
-        );
-        if (listAllResults.work) {
-          listAllResults.work = listAllResults.work.map(event => ({
-            ...event,
-            calendar: 'Work - view only'
-          }));
-        }
-        if (listAllResults.northstar) {
-          listAllResults.northstar = listAllResults.northstar.map(event => ({
-            ...event,
-            calendar: 'Northstar'
-          }));
-        }
-        return listAllResults;
 
       case 'get_next_event':
         return await calendar.getNextEvent();
@@ -269,7 +205,7 @@ async function executeTool(toolName, toolInput, context = {}) {
         }
 
         const detected = applyPrefixAndColor(baseTitle, context.userMessage);
-        return await calendar.createEvent('northstar', {
+        return await calendar.createEvent({
           title: detected.title,
           startTime: toolInput.start_time,
           endTime: toolInput.end_time,
@@ -280,10 +216,7 @@ async function executeTool(toolName, toolInput, context = {}) {
         });
       
       case 'update_event':
-        if (isWorkCalendarInput(toolInput.calendar)) {
-          return { message: "That's on your Work calendar which I can't edit. You'll need to change that in Google Calendar directly." };
-        }
-        return await calendar.updateEvent('northstar', toolInput.event_id, {
+        return await calendar.updateEvent(toolInput.event_id, {
           title: toolInput.title,
           startTime: toolInput.start_time,
           endTime: toolInput.end_time,
@@ -292,14 +225,10 @@ async function executeTool(toolName, toolInput, context = {}) {
         });
       
       case 'delete_event':
-        if (isWorkCalendarInput(toolInput.calendar)) {
-          return { message: "That's on your Work calendar which I can't edit. You'll need to change that in Google Calendar directly." };
-        }
-        return await calendar.deleteEvent('northstar', toolInput.event_id);
+        return await calendar.deleteEvent(toolInput.event_id);
       
       case 'find_event':
         return await calendar.findEvent(
-          toolInput.calendar,
           toolInput.query,
           toolInput.start_date,
           toolInput.end_date
@@ -327,7 +256,7 @@ function buildSystemPrompt() {
 
 ## WHO YOU ARE
 
-You manage Tim's schedule. You can see his Work calendar (view-only, his 9-5 job) and edit his Northstar calendar (where everything gets scheduled).
+You manage Tim's schedule. Everything goes on the Northstar calendar.
 
 When Tim asks a question, answer it. When he asks you to do something, do it. Use good judgment.
 
@@ -362,8 +291,6 @@ These keep you from getting confused:
 - If you're unsure about a date, state your assumption and ask
 - If you can't find an event, say so
 - If moving multiple events, list them first and confirm
-- Work calendar is view-only - you can't edit it
-
 ${getDateContext()}`;
 }
 
