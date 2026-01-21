@@ -63,6 +63,9 @@ async function listEvents(timeMin, timeMax) {
 }
 
 async function createEvent(eventDetails) {
+  if (typeof eventDetails === 'string') {
+    eventDetails = arguments[1] || {};
+  }
   const calendar = getCalendarClient();
   const calendarId = resolveCalendarId();
   
@@ -87,7 +90,9 @@ async function createEvent(eventDetails) {
     event.reminders = eventDetails.reminders;
   }
   
-  if (eventDetails.color && COLORS[eventDetails.color.toLowerCase()]) {
+  if (eventDetails.colorId) {
+    event.colorId = String(eventDetails.colorId);
+  } else if (eventDetails.color && COLORS[eventDetails.color.toLowerCase()]) {
     event.colorId = COLORS[eventDetails.color.toLowerCase()];
   }
   

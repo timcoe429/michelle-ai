@@ -77,6 +77,14 @@ const tools = [
     }
   },
   {
+    name: "test_colors",
+    description: "DEBUG: Creates 11 test events with colorIds 1-11. Use when Tim says 'test colors'.",
+    input_schema: {
+      type: "object",
+      properties: {}
+    }
+  },
+  {
     name: "update_event",
     description: "Update an existing Northstar event. First use find_event to get the event ID.",
     input_schema: {
@@ -215,6 +223,27 @@ async function executeTool(toolName, toolInput, context = {}) {
           reminders: reminders
         });
       
+      case 'test_colors':
+        const now = new Date();
+        const startHour = new Date(now);
+        startHour.setHours(startHour.getHours() + 1, 0, 0, 0);
+
+        const created = [];
+        for (let i = 1; i <= 11; i += 1) {
+          const startTime = new Date(startHour.getTime() + (i - 1) * 15 * 60 * 1000);
+          const endTime = new Date(startTime.getTime() + 15 * 60 * 1000);
+
+          await calendar.createEvent('northstar', {
+            title: `Color Test ${i}`,
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
+            colorId: i
+          });
+          created.push(`Color Test ${i} (colorId: ${i})`);
+        }
+
+        return { created };
+
       case 'update_event':
         return await calendar.updateEvent(toolInput.event_id, {
           title: toolInput.title,
@@ -266,6 +295,11 @@ Everything goes on Northstar. Apply these automatically:
 - Work/ServiceCore/Docket/SC mentioned → "SC - " prefix + yellow
 - Personal mentioned → "P - " prefix + green
 - Everything else → no prefix + blue
+
+## DEBUG COMMANDS
+
+### DEBUG TOOL
+If Tim says "test colors", use the test_colors tool. This is for debugging only.
 
 Follow-up calls:
 - Detect follow-ups from "follow up", "call with", a specific person, or an email
