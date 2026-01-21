@@ -166,13 +166,13 @@ function applyPrefixAndColor(title, userMessage) {
   const hasPersonalKeyword = combined.includes('personal');
   if (hasWorkKeyword) {
     const prefixed = titleText.startsWith('SC - ') ? titleText : `SC - ${titleText}`;
-    return { title: prefixed, color: 'yellow' };
+    return { title: prefixed, colorId: '5' };
   }
   if (hasPersonalKeyword) {
     const prefixed = titleText.startsWith('P - ') ? titleText : `P - ${titleText}`;
-    return { title: prefixed, color: 'green' };
+    return { title: prefixed, colorId: '2' };
   }
-  return { title: titleText, color: 'blue' };
+  return { title: titleText, colorId: '7' };
 }
 
 // Execute a tool call
@@ -218,31 +218,10 @@ async function executeTool(toolName, toolInput, context = {}) {
           startTime: toolInput.start_time,
           endTime: toolInput.end_time,
           description: description,
-          color: detected.color,
+          colorId: detected.colorId,
           attendees: attendees,
           reminders: reminders
         });
-      
-      case 'test_colors':
-        const now = new Date();
-        const startHour = new Date(now);
-        startHour.setHours(startHour.getHours() + 1, 0, 0, 0);
-
-        const created = [];
-        for (let i = 1; i <= 11; i += 1) {
-          const startTime = new Date(startHour.getTime() + (i - 1) * 15 * 60 * 1000);
-          const endTime = new Date(startTime.getTime() + 15 * 60 * 1000);
-
-          await calendar.createEvent('northstar', {
-            title: `Color Test ${i}`,
-            startTime: startTime.toISOString(),
-            endTime: endTime.toISOString(),
-            colorId: i
-          });
-          created.push(`Color Test ${i} (colorId: ${i})`);
-        }
-
-        return { created };
 
       case 'update_event':
         return await calendar.updateEvent(toolInput.event_id, {
@@ -295,11 +274,6 @@ Everything goes on Northstar. Apply these automatically:
 - Work/ServiceCore/Docket/SC mentioned → "SC - " prefix + yellow
 - Personal mentioned → "P - " prefix + green
 - Everything else → no prefix + blue
-
-## DEBUG COMMANDS
-
-### DEBUG TOOL
-If Tim says "test colors", use the test_colors tool. This is for debugging only.
 
 Follow-up calls:
 - Detect follow-ups from "follow up", "call with", a specific person, or an email
