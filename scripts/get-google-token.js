@@ -14,8 +14,8 @@ const { google } = require('googleapis');
 const readline = require('readline');
 
 // Fill these in from Google Cloud Console
-const CLIENT_ID = '75848274145-hh5s1qc4dip0t8je94l0s24dl71o76p2.apps.googleusercontent.com';
-const CLIENT_SECRET = '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';
+const CLIENT_ID = '902524806682-l4n1ts8mac88mlbisbv5b6vqdip8vi6b.apps.googleusercontent.com';
+const CLIENT_SECRET = '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';
 
 const oauth2Client = new google.auth.OAuth2(
   CLIENT_ID,
