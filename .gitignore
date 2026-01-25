@@ -3,4 +3,3 @@ node_modules/
 .DS_Store
 *.log
 scripts/get-google-token.js
-scripts/get=google-token.js
