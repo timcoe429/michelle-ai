@@ -19,7 +19,14 @@ function formatEventList(events) {
     return '  _No events scheduled_';
   }
   
-  return events.map(event => {
+  // Sort by ISO start time (timezone-agnostic)
+  const sortedEvents = [...events].sort((a, b) => {
+    const dateA = new Date(a.start);
+    const dateB = new Date(b.start);
+    return dateA - dateB;
+  });
+  
+  return sortedEvents.map(event => {
     const time = formatTime(event.start);
     return `  • ${time} - ${event.title}`;
   }).join('\n');
