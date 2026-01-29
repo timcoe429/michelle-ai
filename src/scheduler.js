@@ -94,21 +94,20 @@ async function sendDailySummary() {
   }
   
   try {
-    // Get today's date range
+    // Get today's date range in the calendar's timezone
     const now = new Date();
     const timezone = process.env.TIMEZONE || 'America/Denver';
     
-    // Start of today
-    const startOfDay = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
-    startOfDay.setHours(0, 0, 0, 0);
+    // Get today's date as YYYY-MM-DD string in target timezone
+    const todayStr = now.toLocaleDateString('en-CA', { timeZone: timezone });
     
-    // End of today
-    const endOfDay = new Date(startOfDay);
-    endOfDay.setHours(23, 59, 59, 999);
+    // Create simple ISO datetime strings
+    const startOfDay = `${todayStr}T00:00:00`;
+    const endOfDay = `${todayStr}T23:59:59`;
     
     const [weatherLine, northstarEvents] = await Promise.all([
       getWeatherLine(),
-      listEvents(startOfDay.toISOString(), endOfDay.toISOString())
+      listEvents(startOfDay, endOfDay)
     ]);
     
     // Format the summary
