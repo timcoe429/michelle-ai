@@ -101,9 +101,31 @@ async function sendDailySummary() {
     // Get today's date as YYYY-MM-DD string in target timezone
     const todayStr = now.toLocaleDateString('en-CA', { timeZone: timezone });
     
-    // Create simple ISO datetime strings
-    const startOfDay = `${todayStr}T00:00:00`;
-    const endOfDay = `${todayStr}T23:59:59`;
+    // Get timezone offset string (like "-07:00")
+    const offsetPart = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      timeZoneName: 'shortOffset'
+    }).formatToParts(now).find(p => p.type === 'timeZoneName').value.replace('GMT', '');
+    
+    // Format offset to RFC3339 format (e.g., "-5" -> "-05:00", "-7" -> "-07:00")
+    // Parse offset (format is like "-5" or "+5" or "-5:30")
+    let offsetStr = offsetPart;
+    if (!offsetStr.includes(':')) {
+      // Simple hour offset like "-5" or "+5"
+      const sign = offsetStr.startsWith('-') ? '-' : '+';
+      const hours = Math.abs(parseInt(offsetStr));
+      offsetStr = `${sign}${String(hours).padStart(2, '0')}:00`;
+    } else {
+      // Already has minutes like "-5:30"
+      const [hours, mins] = offsetStr.split(':');
+      const sign = hours.startsWith('-') ? '-' : '+';
+      const absHours = Math.abs(parseInt(hours));
+      offsetStr = `${sign}${String(absHours).padStart(2, '0')}:${mins.padStart(2, '0')}`;
+    }
+    
+    // Create RFC3339 datetime strings
+    const startOfDay = `${todayStr}T00:00:00${offsetStr}`;
+    const endOfDay = `${todayStr}T23:59:59${offsetStr}`;
     
     const [weatherLine, northstarEvents] = await Promise.all([
       getWeatherLine(),
