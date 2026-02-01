@@ -333,10 +333,16 @@ async function handleMessage(event) {
     const systemPrompt = buildSystemPrompt();
     let response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 1024,
+      max_tokens: 4096,
       system: systemPrompt,
       tools: tools,
       messages: messages
+    });
+    
+    console.log('Claude response:', {
+      stop_reason: response.stop_reason,
+      content_blocks: response.content.length,
+      block_types: response.content.map(b => b.type)
     });
     
     // Handle tool use loop
@@ -362,16 +368,28 @@ async function handleMessage(event) {
       
       response = await anthropic.messages.create({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 1024,
+        max_tokens: 4096,
         system: systemPrompt,
         tools: tools,
         messages: messages
+      });
+      
+      console.log('Claude response:', {
+        stop_reason: response.stop_reason,
+        content_blocks: response.content.length,
+        block_types: response.content.map(b => b.type)
       });
     }
     
     // Extract text response
     const textContent = response.content.find(block => block.type === 'text');
-    const replyText = textContent ? textContent.text : "I couldn't process that request.";
+    let replyText;
+    if (textContent) {
+      replyText = textContent.text;
+    } else {
+      console.error('No text content in response. Full response:', JSON.stringify(response.content, null, 2));
+      replyText = "I tried to process that but got an incomplete response. Could you try breaking that into smaller requests? (e.g., 'create my morning events' then 'create my afternoon events')";
+    }
     
     // Add assistant response to history
     addMessage(userId, 'assistant', replyText);
@@ -388,7 +406,7 @@ async function handleMessage(event) {
     await sendSlackMessage(channel, replyText);
     
   } catch (error) {
-    console.error('Error processing message:', error);
+    console.error('Error processing message - full error:', JSON.stringify(error, null, 2));
     if (thinkingTs) {
       try {
         await deleteSlackMessage(channel, thinkingTs);
