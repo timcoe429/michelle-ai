@@ -1,26 +1,26 @@
 # Current Plan
 
-## Status: Fixing OAuth + Project Setup
+## Status: OAuth Migration Complete, Per-User Config Active
 
 ### Completed
 - Core bot functionality (create, update, delete, find events)
-- Daily summary with work calendar sync
-- Slack integration with thinking indicators
+- Multi-user support with per-user calendar configuration
+- Slack formatting fixes (native Slack syntax)
+- Per-user config system (timezone, weather, daily channel)
+- Multi-user daily summaries with per-user timezone/weather
 - Prefix/color system for event categorization
-- Weather integration for daily summaries (Fort Lauderdale)
 - Follow-up event automation
 - Error logging improvements
 - Force fresh calendar data on every query
 
 ### In Progress
-- [ ] **CLAUDE.md and /ai context files** — Setting up project memory so Cursor always knows where we left off
-- [ ] **Google OAuth permanent fix** — Token expires every 7 days because Google Cloud project is in "Testing" mode. Need to either move to "Internal" app type or publish to "Production"
+- [ ] **Omiah setup** — Needs Google OAuth refresh token configured
 
 ### Blockers
-- Google OAuth token expiration breaks the bot weekly until manually refreshed
+- None currently
 
 ### Next Up
-- Fix OAuth permanently (after context files are done)
-- Evaluate multi-user deployment
+- Complete Omiah's Google OAuth setup
+- Consider per-user cron schedules if timezone differences become an issue
 
 ---

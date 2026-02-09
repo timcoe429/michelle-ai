@@ -2,7 +2,7 @@ const cron = require('node-cron');
 const { sendSlackMessage } = require('./slack');
 const { listEvents } = require('./calendar');
 
-function formatTime(isoString) {
+function formatTime(isoString, timezone) {
   if (!isoString) return 'All day';
   
   const date = new Date(isoString);
@@ -10,11 +10,11 @@ function formatTime(isoString) {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
-    timeZone: process.env.TIMEZONE || 'America/Denver'
+    timeZone: timezone || process.env.TIMEZONE || 'America/Denver'
   });
 }
 
-function formatEventList(events) {
+function formatEventList(events, timezone) {
   if (!events || events.length === 0) {
     return '  _No events scheduled_';
   }
@@ -27,137 +27,132 @@ function formatEventList(events) {
   });
   
   return sortedEvents.map(event => {
-    const time = formatTime(event.start);
+    const time = formatTime(event.start, timezone);
     return `  • ${time} - ${event.title}`;
   }).join('\n');
 }
 
-async function fetchWeather() {
+async function fetchWeather(cityName) {
   const apiKey = process.env.OPENWEATHER_API_KEY;
-  const city = process.env.WEATHER_CITY || 'Fort Lauderdale, Florida';
-
+  
   if (!apiKey) {
-    console.warn('OPENWEATHER_API_KEY not set, skipping weather');
     return { error: 'missing_api_key' };
   }
-
-  const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&units=imperial&appid=${apiKey}`;
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    let errorDetail = '';
-    try {
-      errorDetail = await response.text();
-    } catch (readError) {
-      errorDetail = '';
-    }
-    throw new Error(`OpenWeatherMap error ${response.status}: ${errorDetail}`);
-  }
-
-  const data = await response.json();
-  return {
-    temp: data?.main?.temp,
-    feelsLike: data?.main?.feels_like,
-    condition: data?.weather?.[0]?.description
-  };
-}
-
-async function getWeatherLine() {
+  
+  const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(cityName)}&units=imperial&appid=${apiKey}`;
+  
   try {
-    const weather = await fetchWeather();
-    if (!weather || weather.error) {
-      return '🌤️ *Weather:* Weather unavailable';
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`OpenWeatherMap error ${response.status}`);
     }
-
-    const temperature = Math.round(Number(weather.temp));
-    const feelsLike = Math.round(Number(weather.feelsLike));
-    const conditionRaw = weather.condition || 'Unknown';
-    const condition = conditionRaw.charAt(0).toUpperCase() + conditionRaw.slice(1);
-
-    if (Number.isNaN(temperature) || Number.isNaN(feelsLike)) {
-      return '🌤️ *Weather:* Weather unavailable';
-    }
-
-    return `🌤️ *Weather:* ${temperature}°F (feels like ${feelsLike}°F) - ${condition}`;
+    
+    const data = await response.json();
+    return {
+      temp: data?.main?.temp,
+      feelsLike: data?.main?.feels_like,
+      condition: data?.weather?.[0]?.description
+    };
   } catch (error) {
     console.error('Weather fetch failed:', error.message);
-    return '🌤️ *Weather:* Weather unavailable';
+    return { error: error.message };
   }
 }
 
 async function sendDailySummary() {
-  const channelId = process.env.SLACK_CHANNEL_ID;
+  // Find all configured users
+  const userKeys = Object.keys(process.env).filter(key => 
+    key.startsWith('USER_') && key.endsWith('_SLACK_ID')
+  );
   
-  if (!channelId) {
-    console.error('SLACK_CHANNEL_ID not set, skipping daily summary');
+  if (userKeys.length === 0) {
+    console.warn('No users configured, skipping daily summary');
     return;
   }
   
-  try {
-    // Get today's date range in the calendar's timezone
-    const now = new Date();
-    const timezone = process.env.TIMEZONE || 'America/Denver';
+  // Process each user
+  for (const slackIdKey of userKeys) {
+    const userId = process.env[slackIdKey];
+    const userPrefix = slackIdKey.replace('_SLACK_ID', '');
     
-    // Get today's date as YYYY-MM-DD string in target timezone
-    const todayStr = now.toLocaleDateString('en-CA', { timeZone: timezone });
-    
-    // Get timezone offset string (like "-07:00")
-    const offsetPart = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      timeZoneName: 'shortOffset'
-    }).formatToParts(now).find(p => p.type === 'timeZoneName').value.replace('GMT', '');
-    
-    // Format offset to RFC3339 format (e.g., "-5" -> "-05:00", "-7" -> "-07:00")
-    // Parse offset (format is like "-5" or "+5" or "-5:30")
-    let offsetStr = offsetPart;
-    if (!offsetStr.includes(':')) {
-      // Simple hour offset like "-5" or "+5"
-      const sign = offsetStr.startsWith('-') ? '-' : '+';
-      const hours = Math.abs(parseInt(offsetStr));
-      offsetStr = `${sign}${String(hours).padStart(2, '0')}:00`;
-    } else {
-      // Already has minutes like "-5:30"
-      const [hours, mins] = offsetStr.split(':');
-      const sign = hours.startsWith('-') ? '-' : '+';
-      const absHours = Math.abs(parseInt(hours));
-      offsetStr = `${sign}${String(absHours).padStart(2, '0')}:${mins.padStart(2, '0')}`;
+    // Get user config
+    const dailyChannel = process.env[`${userPrefix}_DAILY_CHANNEL`];
+    if (!dailyChannel) {
+      console.log(`Skipping user ${userId} - no DAILY_CHANNEL configured`);
+      continue;
     }
     
-    // Create RFC3339 datetime strings
-    const startOfDay = `${todayStr}T00:00:00${offsetStr}`;
-    const endOfDay = `${todayStr}T23:59:59${offsetStr}`;
+    const calendarId = process.env[`${userPrefix}_CALENDAR`];
+    const timezone = process.env[`${userPrefix}_TIMEZONE`] || process.env.TIMEZONE || 'America/Denver';
+    const weatherLocation = process.env[`${userPrefix}_WEATHER_LOCATION`];
     
-    // Get Tim's calendar ID (hardcoded for now, will make multi-user later)
-    const timCalendarId = process.env.USER_TIM_CALENDAR;
-    if (!timCalendarId) {
-      console.error('USER_TIM_CALENDAR not set, skipping daily summary');
-      return;
+    if (!calendarId) {
+      console.error(`User ${userId} missing CALENDAR config, skipping`);
+      continue;
     }
     
-    const [weatherLine, timEvents] = await Promise.all([
-      getWeatherLine(),
-      listEvents(timCalendarId, startOfDay, endOfDay)
-    ]);
-    
-    // Format the summary
-    const dateStr = now.toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-      timeZone: timezone
-    });
-    
-    let summary = `📅 *Daily Summary for ${dateStr}*\n\n`;
-    summary += `${weatherLine}\n\n`;
-    summary += `${formatEventList(timEvents)}`;
-    
-    await sendSlackMessage(channelId, summary);
-    console.log('Daily summary sent successfully');
-    
-  } catch (error) {
-    console.error('Error sending daily summary:', error);
+    try {
+      await sendUserDailySummary({
+        userId,
+        calendarId,
+        timezone,
+        dailyChannel,
+        weatherLocation
+      });
+    } catch (error) {
+      console.error(`Error sending daily summary for user ${userId}:`, error);
+    }
   }
+}
+
+async function sendUserDailySummary({ userId, calendarId, timezone, dailyChannel, weatherLocation }) {
+  const now = new Date();
+  
+  // Get today's date string in user's timezone (YYYY-MM-DD format)
+  const todayStr = now.toLocaleDateString('en-CA', { timeZone: timezone });
+  
+  // Simple date strings - Google Calendar API will interpret these in the specified timezone
+  const startOfDay = `${todayStr}T00:00:00`;
+  const endOfDay = `${todayStr}T23:59:59`;
+  
+  // Fetch events and weather in parallel
+  // Pass timezone to listEvents so Google Calendar API handles timezone interpretation
+  const promises = [listEvents(calendarId, startOfDay, endOfDay, timezone)];
+  
+  // Only fetch weather if location is configured
+  if (weatherLocation) {
+    promises.push(fetchWeather(weatherLocation));
+  } else {
+    promises.push(Promise.resolve(null));
+  }
+  
+  const [events, weather] = await Promise.all(promises);
+  
+  // Format date string in user's timezone
+  const dateStr = now.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: timezone
+  });
+  
+  let summary = `📅 *Daily Summary for ${dateStr}*\n\n`;
+  
+  // Add weather if available
+  if (weather && !weather.error) {
+    const temperature = Math.round(Number(weather.temp));
+    const feelsLike = Math.round(Number(weather.feelsLike));
+    const condition = weather.condition ? weather.condition.charAt(0).toUpperCase() + weather.condition.slice(1) : 'Unknown';
+    const location = weatherLocation || 'your location';
+    summary += `🌤️ *Weather:* ${temperature}°F (feels like ${feelsLike}°F) - ${condition} in ${location}\n\n`;
+  }
+  
+  summary += formatEventList(events, timezone);
+  
+  await sendSlackMessage(dailyChannel, summary);
+  console.log(`Daily summary sent to user ${userId} in channel ${dailyChannel}`);
 }
 
 function scheduleDailySummary() {

@@ -28,17 +28,24 @@ function getCalendarClient() {
   return google.calendar({ version: 'v3', auth: oauth2Client });
 }
 
-async function listEvents(calendarId, timeMin, timeMax) {
+async function listEvents(calendarId, timeMin, timeMax, timeZone) {
   const calendar = getCalendarClient();
   
-  const response = await calendar.events.list({
+  const params = {
     calendarId,
     timeMin: timeMin || new Date().toISOString(),
     timeMax: timeMax || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     singleEvents: true,
     orderBy: 'startTime',
     maxResults: 20
-  });
+  };
+  
+  // Add timeZone if provided (lets Google Calendar API interpret timeMin/timeMax in that timezone)
+  if (timeZone) {
+    params.timeZone = timeZone;
+  }
+  
+  const response = await calendar.events.list(params);
   
   return response.data.items.map(event => ({
     id: event.id,

@@ -143,36 +143,39 @@ const tools = [
   }
 ];
 
-// Get calendar ID for a Slack user ID
-function getUserCalendarId(userId) {
-  // Check for Tim
-  if (userId === process.env.USER_TIM_SLACK_ID) {
-    return process.env.USER_TIM_CALENDAR;
-  }
-  
-  // Check for Omiah
-  if (userId === process.env.USER_OMIAH_SLACK_ID) {
-    return process.env.USER_OMIAH_CALENDAR;
-  }
-  
-  // Fallback: try to find by pattern (for future users)
+// Get user config for a Slack user ID
+function getUserConfig(userId) {
+  // Scan env vars for USER_*_SLACK_ID patterns
   const userKeys = Object.keys(process.env).filter(key => 
     key.startsWith('USER_') && key.endsWith('_SLACK_ID')
   );
   
+  // Find matching user
   for (const key of userKeys) {
     if (process.env[key] === userId) {
       const userPrefix = key.replace('_SLACK_ID', '');
-      const calendarKey = `${userPrefix}_CALENDAR`;
-      if (process.env[calendarKey]) {
-        return process.env[calendarKey];
+      
+      const config = {
+        name: process.env[`${userPrefix}_NAME`] || null,
+        calendarId: process.env[`${userPrefix}_CALENDAR`] || null,
+        timezone: process.env[`${userPrefix}_TIMEZONE`] || process.env.TIMEZONE || 'America/Denver',
+        weatherLocation: process.env[`${userPrefix}_WEATHER_LOCATION`] || null,
+        dailyChannel: process.env[`${userPrefix}_DAILY_CHANNEL`] || null
+      };
+      
+      // Validate required fields
+      if (!config.calendarId) {
+        console.warn(`User ${userId} found but missing CALENDAR config`);
+        return null;
       }
+      
+      return config;
     }
   }
   
-  // Default fallback (shouldn't happen if config is correct)
-  console.warn(`No calendar ID found for user ${userId}, using primary`);
-  return 'primary';
+  // User not found
+  console.warn(`No config found for user ${userId}`);
+  return null;
 }
 
 function applyPrefixAndColor(title, userMessage) {
@@ -191,9 +194,10 @@ function applyPrefixAndColor(title, userMessage) {
 
 // Execute a tool call
 async function executeTool(toolName, toolInput, context = {}) {
-  const calendarId = context.calendarId;
+  const userConfig = context.userConfig;
+  const calendarId = userConfig?.calendarId;
   if (!calendarId) {
-    return { error: 'Calendar ID not found in context' };
+    return { error: 'Calendar ID not found in user config' };
   }
 
   try {
@@ -277,19 +281,22 @@ async function executeTool(toolName, toolInput, context = {}) {
 }
 
 // Get current date info for context
-function getDateContext() {
+function getDateContext(timezone) {
   const now = new Date();
-  const timezone = process.env.TIMEZONE || 'America/Denver';
+  const tz = timezone || process.env.TIMEZONE || 'America/Denver';
   
-  return `Current date and time: ${now.toLocaleString('en-US', { timeZone: timezone, dateStyle: 'full', timeStyle: 'short' })}. Timezone: ${timezone}.`;
+  return `Current date and time: ${now.toLocaleString('en-US', { timeZone: tz, dateStyle: 'full', timeStyle: 'short' })}. Timezone: ${tz}.`;
 }
 
-function buildSystemPrompt() {
-  return `You are Michelle, the user's calendar assistant. You're smart, helpful, and you think for yourself.
+function buildSystemPrompt(userConfig) {
+  const userName = userConfig?.name || 'the user';
+  const timezone = userConfig?.timezone || process.env.TIMEZONE || 'America/Denver';
+  
+  return `You are Michelle, ${userName}'s calendar assistant. You're smart, helpful, and you think for yourself.
 
 ## WHO YOU ARE
 
-You manage Tim's Northstar calendar.
+You manage ${userName}'s Northstar calendar.
 
 When the user asks a question, answer it. When they ask you to do something, do it. Use good judgment.
 
@@ -332,14 +339,30 @@ These keep you from getting confused:
 - This includes: "what do I have", "when is my meeting", "what's my schedule", "am I free at X"
 - Even if you think you know the answer from earlier in the conversation, CHECK AGAIN
 - Getting times wrong breaks trust - always verify
-${getDateContext()}`;
+
+## SLACK FORMATTING
+You're responding in Slack, not Markdown. Use Slack formatting:
+- Bold: *text* (single asterisk, NOT double)
+- Italic: _text_
+- Bullets: • (bullet character, not dashes)
+- Line breaks: just use newlines
+- Code: \`text\` (backticks work the same)
+- Never use ** for bold — that shows as raw text in Slack
+- Never use - for bullet points — use • instead
+${getDateContext(timezone)}`;
 }
 
 async function handleMessage(event) {
   const userId = event.user;
   const userMessage = event.text;
   const channel = event.channel;
-  const calendarId = getUserCalendarId(userId);
+  const userConfig = getUserConfig(userId);
+  
+  if (!userConfig) {
+    console.error(`No config found for user ${userId}`);
+    await sendSlackMessage(channel, "Sorry, I couldn't find your user configuration. Please contact the administrator.");
+    return;
+  }
   
   console.log(`Message from ${userId}: ${userMessage}`);
 
@@ -363,7 +386,7 @@ async function handleMessage(event) {
   ];
   
   try {
-    const systemPrompt = buildSystemPrompt();
+    const systemPrompt = buildSystemPrompt(userConfig);
     let response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
@@ -385,7 +408,7 @@ async function handleMessage(event) {
       
       for (const toolUse of toolUseBlocks) {
         console.log(`Executing tool: ${toolUse.name}`, toolUse.input);
-        const result = await executeTool(toolUse.name, toolUse.input, { userMessage, calendarId });
+        const result = await executeTool(toolUse.name, toolUse.input, { userMessage, userConfig });
         console.log(`Tool result:`, result);
         
         toolResults.push({

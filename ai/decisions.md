@@ -28,4 +28,8 @@
 **Decision:** Every schedule-related query fetches live data from Google Calendar API.
 **Why:** Prevents hallucination from stale cached data.
 
+## Per-User Config via Env Vars
+**Decision:** Each user's settings (calendar, timezone, weather location, daily channel) stored as env vars with USER_{NAME}_ prefix pattern.
+**Why:** Single config location in Railway, no database dependency, simple to manage. Env vars are version-controlled via Railway dashboard and easy to update without code changes. Chose this over database for simplicity — stateless design keeps server restartable without data loss.
+
 ---
