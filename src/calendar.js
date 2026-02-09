@@ -1,11 +1,5 @@
 const { google } = require('googleapis');
 
-// Calendar name mapping
-const CALENDARS = {
-  northstar: process.env.CALENDAR_NORTHSTAR || 'primary'
-};
-const CALENDAR_DISPLAY_NAME = 'Northstar';
-
 // Color mapping (Google Calendar color IDs)
 const COLORS = {
   blue: '1',
@@ -34,13 +28,8 @@ function getCalendarClient() {
   return google.calendar({ version: 'v3', auth: oauth2Client });
 }
 
-function resolveCalendarId() {
-  return CALENDARS.northstar;
-}
-
-async function listEvents(timeMin, timeMax) {
+async function listEvents(calendarId, timeMin, timeMax) {
   const calendar = getCalendarClient();
-  const calendarId = resolveCalendarId();
   
   const response = await calendar.events.list({
     calendarId,
@@ -57,17 +46,15 @@ async function listEvents(timeMin, timeMax) {
     description: event.description,
     start: event.start.dateTime || event.start.date,
     end: event.end.dateTime || event.end.date,
-    calendar: CALENDAR_DISPLAY_NAME,
     color: event.colorId
   }));
 }
 
-async function createEvent(eventDetails) {
+async function createEvent(calendarId, eventDetails) {
   if (typeof eventDetails === 'string') {
     eventDetails = arguments[1] || {};
   }
   const calendar = getCalendarClient();
-  const calendarId = resolveCalendarId();
   
   const event = {
     summary: eventDetails.title,
@@ -106,14 +93,12 @@ async function createEvent(eventDetails) {
     title: response.data.summary,
     start: response.data.start.dateTime,
     end: response.data.end.dateTime,
-    calendar: CALENDAR_DISPLAY_NAME,
     link: response.data.htmlLink
   };
 }
 
-async function updateEvent(eventId, updates) {
+async function updateEvent(calendarId, eventId, updates) {
   const calendar = getCalendarClient();
-  const calendarId = resolveCalendarId();
   
   // First get the existing event
   const existing = await calendar.events.get({
@@ -152,26 +137,23 @@ async function updateEvent(eventId, updates) {
     id: response.data.id,
     title: response.data.summary,
     start: response.data.start.dateTime,
-    end: response.data.end.dateTime,
-    calendar: CALENDAR_DISPLAY_NAME
+    end: response.data.end.dateTime
   };
 }
 
-async function deleteEvent(eventId) {
+async function deleteEvent(calendarId, eventId) {
   const calendar = getCalendarClient();
-  const calendarId = resolveCalendarId();
   
   await calendar.events.delete({
     calendarId,
     eventId
   });
   
-  return { success: true, calendar: CALENDAR_DISPLAY_NAME };
+  return { success: true };
 }
 
-async function findEvent(searchQuery, timeMin, timeMax) {
+async function findEvent(calendarId, searchQuery, timeMin, timeMax) {
   const calendar = getCalendarClient();
-  const calendarId = resolveCalendarId();
   const now = new Date();
   const startOfToday = new Date(now);
   startOfToday.setHours(0, 0, 0, 0);
@@ -191,17 +173,15 @@ async function findEvent(searchQuery, timeMin, timeMax) {
     title: event.summary,
     description: event.description,
     start: event.start.dateTime || event.start.date,
-    end: event.end.dateTime || event.end.date,
-    calendar: CALENDAR_DISPLAY_NAME
+    end: event.end.dateTime || event.end.date
   }));
 }
 
-async function getNextEvent() {
+async function getNextEvent(calendarId) {
   const now = new Date();
   const endOfDay = new Date(now);
   endOfDay.setHours(23, 59, 59, 999);
   
-  const calendarId = resolveCalendarId();
   let allEvents = [];
   
   try {
@@ -220,11 +200,10 @@ async function getNextEvent() {
       title: event.summary,
       description: event.description,
       start: event.start.dateTime || event.start.date,
-      end: event.end.dateTime || event.end.date,
-      calendar: CALENDAR_DISPLAY_NAME
+      end: event.end.dateTime || event.end.date
     }));
   } catch (error) {
-    console.error('Error fetching Northstar calendar:', error.message);
+    console.error('Error fetching calendar:', error.message);
   }
   
   // Sort by start time and return the first one
@@ -240,21 +219,11 @@ async function getNextEvent() {
   };
 }
 
-function eventsMatchByTitleAndTime(eventA, eventB) {
-  if (!eventA || !eventB) return false;
-  const titleMatch = (eventA.title || '') === (eventB.title || '');
-  const startMatch = String(eventA.start || '') === String(eventB.start || '');
-  const endMatch = String(eventA.end || '') === String(eventB.end || '');
-  return titleMatch && startMatch && endMatch;
-}
-
 module.exports = {
   listEvents,
   createEvent,
   updateEvent,
   deleteEvent,
   findEvent,
-  getNextEvent,
-  eventsMatchByTitleAndTime,
-  CALENDARS
+  getNextEvent
 };

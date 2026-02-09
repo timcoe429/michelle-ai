@@ -9,7 +9,7 @@ const anthropic = new Anthropic();
 const tools = [
   {
     name: "list_events",
-    description: "List events from Northstar. Use this to see what's scheduled.",
+    description: "List events from the calendar. Use this to see what's scheduled.",
     input_schema: {
       type: "object",
       properties: {
@@ -29,12 +29,7 @@ const tools = [
     description: "Get the single next upcoming event. Use this when user asks 'what's next' or 'what do I have coming up'.",
     input_schema: {
       type: "object",
-      properties: {
-        include_all_calendars: {
-          type: "boolean",
-          description: "Whether to check all calendars (default true)"
-        }
-      }
+      properties: {}
     }
   },
   {
@@ -78,7 +73,7 @@ const tools = [
   },
   {
     name: "update_event",
-    description: "Update an existing Northstar event. First use find_event to get the event ID.",
+    description: "Update an existing calendar event. First use find_event to get the event ID.",
     input_schema: {
       type: "object",
       properties: {
@@ -112,7 +107,7 @@ const tools = [
   },
   {
     name: "delete_event",
-    description: "Delete a Northstar event. First use find_event to get the event ID.",
+    description: "Delete a calendar event. First use find_event to get the event ID.",
     input_schema: {
       type: "object",
       properties: {
@@ -148,37 +143,70 @@ const tools = [
   }
 ];
 
+// Get calendar ID for a Slack user ID
+function getUserCalendarId(userId) {
+  // Check for Tim
+  if (userId === process.env.USER_TIM_SLACK_ID) {
+    return process.env.USER_TIM_CALENDAR;
+  }
+  
+  // Check for Omiah
+  if (userId === process.env.USER_OMIAH_SLACK_ID) {
+    return process.env.USER_OMIAH_CALENDAR;
+  }
+  
+  // Fallback: try to find by pattern (for future users)
+  const userKeys = Object.keys(process.env).filter(key => 
+    key.startsWith('USER_') && key.endsWith('_SLACK_ID')
+  );
+  
+  for (const key of userKeys) {
+    if (process.env[key] === userId) {
+      const userPrefix = key.replace('_SLACK_ID', '');
+      const calendarKey = `${userPrefix}_CALENDAR`;
+      if (process.env[calendarKey]) {
+        return process.env[calendarKey];
+      }
+    }
+  }
+  
+  // Default fallback (shouldn't happen if config is correct)
+  console.warn(`No calendar ID found for user ${userId}, using primary`);
+  return 'primary';
+}
+
 function applyPrefixAndColor(title, userMessage) {
   const titleText = (title || '').trim();
   const combined = `${titleText} ${userMessage || ''}`.toLowerCase();
-  const hasWorkKeyword = combined.includes('work') ||
-    combined.includes('servicecore') ||
-    combined.includes('docket') ||
-    /\bsc\b/.test(combined);
   const hasPersonalKeyword = combined.includes('personal');
-  if (hasWorkKeyword) {
-    const prefixed = titleText.startsWith('SC - ') ? titleText : `SC - ${titleText}`;
-    return { title: prefixed, colorId: '5' };
-  }
+  
   if (hasPersonalKeyword) {
     const prefixed = titleText.startsWith('P - ') ? titleText : `P - ${titleText}`;
-    return { title: prefixed, colorId: '2' };
+    return { title: prefixed, colorId: '2' }; // green
   }
-  return { title: titleText, colorId: '7' };
+  
+  // Default: no prefix, blue
+  return { title: titleText, colorId: '1' }; // blue
 }
 
 // Execute a tool call
 async function executeTool(toolName, toolInput, context = {}) {
+  const calendarId = context.calendarId;
+  if (!calendarId) {
+    return { error: 'Calendar ID not found in context' };
+  }
+
   try {
     switch (toolName) {
       case 'list_events':
         return await calendar.listEvents(
+          calendarId,
           toolInput.start_date,
           toolInput.end_date
         );
 
       case 'get_next_event':
-        return await calendar.getNextEvent();
+        return await calendar.getNextEvent(calendarId);
       
       case 'create_event':
         const isFollowUp = Boolean(toolInput.is_followup);
@@ -205,7 +233,7 @@ async function executeTool(toolName, toolInput, context = {}) {
         }
 
         const detected = applyPrefixAndColor(baseTitle, context.userMessage);
-        return await calendar.createEvent({
+        return await calendar.createEvent(calendarId, {
           title: detected.title,
           startTime: toolInput.start_time,
           endTime: toolInput.end_time,
@@ -216,19 +244,24 @@ async function executeTool(toolName, toolInput, context = {}) {
         });
 
       case 'update_event':
-        return await calendar.updateEvent(toolInput.event_id, {
-          title: toolInput.title,
-          startTime: toolInput.start_time,
-          endTime: toolInput.end_time,
-          description: toolInput.description,
-          color: toolInput.color
-        });
+        return await calendar.updateEvent(
+          calendarId,
+          toolInput.event_id,
+          {
+            title: toolInput.title,
+            startTime: toolInput.start_time,
+            endTime: toolInput.end_time,
+            description: toolInput.description,
+            color: toolInput.color
+          }
+        );
       
       case 'delete_event':
-        return await calendar.deleteEvent(toolInput.event_id);
+        return await calendar.deleteEvent(calendarId, toolInput.event_id);
       
       case 'find_event':
         return await calendar.findEvent(
+          calendarId,
           toolInput.query,
           toolInput.start_date,
           toolInput.end_date
@@ -256,14 +289,13 @@ function buildSystemPrompt() {
 
 ## WHO YOU ARE
 
-You manage the user's schedule. Everything goes on the Northstar calendar.
+You manage Tim's Northstar calendar.
 
 When the user asks a question, answer it. When they ask you to do something, do it. Use good judgment.
 
 ## WHEN CREATING EVENTS
 
-Everything goes on Northstar. Apply these automatically:
-- Work/ServiceCore/Docket/SC mentioned → "SC - " prefix + yellow
+Apply these automatically:
 - Personal mentioned → "P - " prefix + green
 - Everything else → no prefix + blue
 
@@ -307,6 +339,7 @@ async function handleMessage(event) {
   const userId = event.user;
   const userMessage = event.text;
   const channel = event.channel;
+  const calendarId = getUserCalendarId(userId);
   
   console.log(`Message from ${userId}: ${userMessage}`);
 
@@ -352,7 +385,7 @@ async function handleMessage(event) {
       
       for (const toolUse of toolUseBlocks) {
         console.log(`Executing tool: ${toolUse.name}`, toolUse.input);
-        const result = await executeTool(toolUse.name, toolUse.input, { userMessage });
+        const result = await executeTool(toolUse.name, toolUse.input, { userMessage, calendarId });
         console.log(`Tool result:`, result);
         
         toolResults.push({

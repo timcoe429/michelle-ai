@@ -1,12 +1,12 @@
 # Decisions Log
 
-## Two-Calendar System
-**Decision:** Work calendar is view-only, Northstar is the primary editable calendar.
-**Why:** Tim's work calendar (ServiceCore) is managed elsewhere. Michelle only needs to read it for scheduling awareness. All new events go on Northstar.
+## Single Calendar Per User (Migrated from Two-Calendar System)
+**Decision:** Each user has one calendar in Northstar Workspace. Migrated from two-calendar system (Work + Northstar) to simplify operations and support multi-user.
+**Why:** Work calendar (ServiceCore) is no longer needed. Single calendar per user simplifies code, supports multi-user deployment, and reduces complexity.
 
 ## Prefix-Based Color Coding
-**Decision:** "SC - " prefix + yellow for work, "P - " prefix + green for personal, no prefix + blue for Northstar default.
-**Why:** Visual distinction in Google Calendar. Bot auto-detects keywords and applies prefixes/colors.
+**Decision:** "P - " prefix + green for personal, no prefix + blue for everything else. Removed "SC - " work prefix after migration.
+**Why:** Visual distinction in Google Calendar. Bot auto-detects keywords and applies prefixes/colors. Simplified after removing work calendar.
 
 ## Claude Creates Cursor Prompts (Not Code)
 **Decision:** In the PM workflow, Claude writes prompts for Cursor to execute.
@@ -22,7 +22,7 @@
 
 ## In-Memory Conversation Store
 **Decision:** Use simple in-memory Map with 30-min TTL instead of database.
-**Why:** Single user, stateless is fine. Server restarts clear context which is acceptable.
+**Why:** Multi-user ready but stateless is fine for now. Server restarts clear context which is acceptable.
 
 ## Force Fresh Calendar Data
 **Decision:** Every schedule-related query fetches live data from Google Calendar API.

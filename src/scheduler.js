@@ -127,9 +127,16 @@ async function sendDailySummary() {
     const startOfDay = `${todayStr}T00:00:00${offsetStr}`;
     const endOfDay = `${todayStr}T23:59:59${offsetStr}`;
     
-    const [weatherLine, northstarEvents] = await Promise.all([
+    // Get Tim's calendar ID (hardcoded for now, will make multi-user later)
+    const timCalendarId = process.env.USER_TIM_CALENDAR;
+    if (!timCalendarId) {
+      console.error('USER_TIM_CALENDAR not set, skipping daily summary');
+      return;
+    }
+    
+    const [weatherLine, timEvents] = await Promise.all([
       getWeatherLine(),
-      listEvents(startOfDay, endOfDay)
+      listEvents(timCalendarId, startOfDay, endOfDay)
     ]);
     
     // Format the summary
@@ -143,7 +150,7 @@ async function sendDailySummary() {
     
     let summary = `📅 *Daily Summary for ${dateStr}*\n\n`;
     summary += `${weatherLine}\n\n`;
-    summary += `${formatEventList(northstarEvents)}`;
+    summary += `${formatEventList(timEvents)}`;
     
     await sendSlackMessage(channelId, summary);
     console.log('Daily summary sent successfully');

@@ -40,9 +40,9 @@ After reading, confirm what phase we're in and what the next task is.
 
 ## Calendars
 
-- Work (view-only): `CALENDAR_WORK` — tim@servicecore.com
-- Northstar (primary, editable): `CALENDAR_NORTHSTAR` — tim@northstarroof.com
-- Prefix system: "SC - " = yellow (work), "P - " = green (personal), default = blue (Northstar)
+- Each user has one calendar in Northstar Workspace
+- User calendar IDs configured via `USER_{NAME}_CALENDAR` env vars
+- Prefix system: "P - " = green (personal), default = blue (Northstar)
 
 ## Testing
 

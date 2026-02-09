@@ -65,7 +65,8 @@ app.post('/slack/events', async (req, res) => {
   if (event.subtype) return; // Ignore message edits, deletes, etc.
   
   // Check if user is allowed
-  if (event.user !== process.env.ALLOWED_USER_ID) {
+  const allowedUserIds = (process.env.ALLOWED_USER_IDS || '').split(',').map(id => id.trim());
+  if (!allowedUserIds.includes(event.user)) {
     console.log(`Unauthorized user attempted access: ${event.user}`);
     return;
   }
