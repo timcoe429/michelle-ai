@@ -111,14 +111,16 @@ async function sendUserDailySummary({ userId, calendarId, timezone, dailyChannel
   
   // Get today's date string in user's timezone (YYYY-MM-DD format)
   const todayStr = now.toLocaleDateString('en-CA', { timeZone: timezone });
-  
-  // Simple date strings - Google Calendar API will interpret these in the specified timezone
-  const startOfDay = `${todayStr}T00:00:00`;
-  const endOfDay = `${todayStr}T23:59:59`;
-  
+
+  // Create start and end times as Date objects
+  const startOfDayDate = new Date(todayStr);
+  startOfDayDate.setHours(0, 0, 0, 0);
+
+  const endOfDayDate = new Date(todayStr);
+  endOfDayDate.setHours(23, 59, 59, 999);
+
   // Fetch events and weather in parallel
-  // Pass timezone to listEvents so Google Calendar API handles timezone interpretation
-  const promises = [listEvents(calendarId, startOfDay, endOfDay, timezone)];
+  const promises = [listEvents(calendarId, startOfDayDate.toISOString(), endOfDayDate.toISOString())];
   
   // Only fetch weather if location is configured
   if (weatherLocation) {

@@ -28,9 +28,9 @@ function getCalendarClient() {
   return google.calendar({ version: 'v3', auth: oauth2Client });
 }
 
-async function listEvents(calendarId, timeMin, timeMax, timeZone) {
+async function listEvents(calendarId, timeMin, timeMax) {
   const calendar = getCalendarClient();
-  
+
   const params = {
     calendarId,
     timeMin: timeMin || new Date().toISOString(),
@@ -39,12 +39,7 @@ async function listEvents(calendarId, timeMin, timeMax, timeZone) {
     orderBy: 'startTime',
     maxResults: 20
   };
-  
-  // Add timeZone if provided (lets Google Calendar API interpret timeMin/timeMax in that timezone)
-  if (timeZone) {
-    params.timeZone = timeZone;
-  }
-  
+
   const response = await calendar.events.list(params);
   
   return response.data.items.map(event => ({
