@@ -37,4 +37,12 @@
 **Why:** Google Calendar API rejects requests that mix partial ISO strings with a timeZone parameter (returns 400 Bad Request). Full ISO format via .toISOString() is the standard the API expects.
 **Implementation:** In scheduler.js, create Date objects for start/end of user's day, call .toISOString(), and pass to listEvents without a timezone parameter. The calendar.js listEvents function signature was updated to remove the timeZone argument.
 
+## Timezone-Aware Daily Summary Date Ranges
+**Decision:** Use Intl.DateTimeFormat with formatToParts to calculate start/end of day in user's timezone, not server timezone.
+**Why:** Server runs in UTC on Railway. Previous code using new Date(todayStr) with setHours() created midnight in server timezone, causing wrong date ranges for users in other timezones. This led to events from the previous day appearing in daily summaries and incorrect chronological ordering.
+
+## Pipe Separator for Schedule Event Lists
+**Decision:** Use pipe separator (|) between time and event name in schedule lists, reserve bullets (•) for general list items.
+**Why:** Clearer visual distinction in Slack formatting. System prompt now explicitly instructs Claude to use "7:00 - 9:00 AM | Event Name" format for calendar event lists while keeping bullets for other list types.
+
 ---

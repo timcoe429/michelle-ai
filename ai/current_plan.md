@@ -1,6 +1,6 @@
 # Current Plan
 
-## Status: OAuth Migration Complete, Per-User Config Active
+## Status: Daily Summary and Formatting Fixes Complete
 
 ### Completed
 - Core bot functionality (create, update, delete, find events)
@@ -12,16 +12,19 @@
 - Follow-up event automation
 - Error logging improvements
 - Force fresh calendar data on every query
-- Daily summary 400 error fix (full ISO 8601 format for Google Calendar API)
+- Daily summary chronological order fix (timezone-aware date range calculation)
+- Schedule formatting fix (pipe separator instead of bullets for event lists)
 
 ### In Progress
-- [ ] **Omiah setup** — Needs Google OAuth refresh token configured
+- [ ] Testing daily summary and schedule formatting fixes in production
 
 ### Blockers
 - None currently
 
 ### Next Up
 - Complete Omiah's Google OAuth setup
+- Verify daily summary shows events in correct chronological order
+- Verify on-demand schedule queries use pipe formatting (7:00 - 9:00 AM | Event Name)
 - Consider per-user cron schedules if timezone differences become an issue
 
 ---
