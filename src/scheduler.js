@@ -19,10 +19,12 @@ function formatEventList(events, timezone) {
     return '  _No events scheduled_';
   }
   
-  // Sort by ISO start time (timezone-agnostic)
+  // Sort by ISO start time (timezone-agnostic). Guard against missing/invalid start.
   const sortedEvents = [...events].sort((a, b) => {
-    const dateA = new Date(a.start);
-    const dateB = new Date(b.start);
+    const dateA = a.start ? new Date(a.start) : new Date(0);
+    const dateB = b.start ? new Date(b.start) : new Date(0);
+    if (isNaN(dateA.getTime())) return 1;
+    if (isNaN(dateB.getTime())) return -1;
     return dateA - dateB;
   });
   
@@ -106,18 +108,67 @@ async function sendDailySummary() {
   }
 }
 
+// Get start/end of day as UTC instants for a given timezone (avoids server TZ assumptions)
+function getStartAndEndOfDayInTimezone(now, timezone) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const parts = formatter.formatToParts(now);
+  const year = parseInt(parts.find(p => p.type === 'year').value, 10);
+  const month = parseInt(parts.find(p => p.type === 'month').value, 10) - 1;
+  const day = parseInt(parts.find(p => p.type === 'day').value, 10);
+
+  const timeFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+
+  // Find UTC instant when it's 00:00:00 in user's timezone
+  let startOfDayDate = null;
+  for (let h = 0; h < 24; h++) {
+    const candidate = new Date(Date.UTC(year, month, day, h, 0, 0, 0));
+    const timeParts = timeFormatter.formatToParts(candidate);
+    const hour = parseInt(timeParts.find(p => p.type === 'hour').value, 10);
+    const min = parseInt(timeParts.find(p => p.type === 'minute').value, 10);
+    const sec = parseInt(timeParts.find(p => p.type === 'second').value, 10);
+    if (hour === 0 && min === 0 && sec === 0) {
+      startOfDayDate = candidate;
+      break;
+    }
+  }
+  if (!startOfDayDate) {
+    startOfDayDate = new Date(Date.UTC(year, month, day, 12, 0, 0, 0));
+  }
+
+  // Find UTC instant when it's 23:00:00 in user's timezone, then add 59m59s999ms
+  let endOfDayDate = null;
+  for (let h = 0; h < 24; h++) {
+    const candidate = new Date(Date.UTC(year, month, day, h, 0, 0, 0));
+    const timeParts = timeFormatter.formatToParts(candidate);
+    const hour = parseInt(timeParts.find(p => p.type === 'hour').value, 10);
+    const min = parseInt(timeParts.find(p => p.type === 'minute').value, 10);
+    const sec = parseInt(timeParts.find(p => p.type === 'second').value, 10);
+    if (hour === 23 && min === 0 && sec === 0) {
+      endOfDayDate = new Date(candidate.getTime() + (59 * 60 + 59) * 1000 + 999);
+      break;
+    }
+  }
+  if (!endOfDayDate) {
+    endOfDayDate = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+  }
+
+  return { startOfDayDate, endOfDayDate };
+}
+
 async function sendUserDailySummary({ userId, calendarId, timezone, dailyChannel, weatherLocation }) {
   const now = new Date();
-  
-  // Get today's date string in user's timezone (YYYY-MM-DD format)
-  const todayStr = now.toLocaleDateString('en-CA', { timeZone: timezone });
-
-  // Create start and end times as Date objects
-  const startOfDayDate = new Date(todayStr);
-  startOfDayDate.setHours(0, 0, 0, 0);
-
-  const endOfDayDate = new Date(todayStr);
-  endOfDayDate.setHours(23, 59, 59, 999);
+  const { startOfDayDate, endOfDayDate } = getStartAndEndOfDayInTimezone(now, timezone);
 
   // Fetch events and weather in parallel
   const promises = [listEvents(calendarId, startOfDayDate.toISOString(), endOfDayDate.toISOString())];

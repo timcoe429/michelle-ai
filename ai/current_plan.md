@@ -12,6 +12,7 @@
 - Follow-up event automation
 - Error logging improvements
 - Force fresh calendar data on every query
+- Daily summary 400 error fix (full ISO 8601 format for Google Calendar API)
 
 ### In Progress
 - [ ] **Omiah setup** — Needs Google OAuth refresh token configured

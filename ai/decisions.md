@@ -32,4 +32,9 @@
 **Decision:** Each user's settings (calendar, timezone, weather location, daily channel) stored as env vars with USER_{NAME}_ prefix pattern.
 **Why:** Single config location in Railway, no database dependency, simple to manage. Env vars are version-controlled via Railway dashboard and easy to update without code changes. Chose this over database for simplicity — stateless design keeps server restartable without data loss.
 
+## ISO 8601 Format for Calendar API Calls
+**Decision:** Use full ISO 8601 datetime strings (via Date.toISOString()) instead of partial datetime strings + separate timeZone parameter.
+**Why:** Google Calendar API rejects requests that mix partial ISO strings with a timeZone parameter (returns 400 Bad Request). Full ISO format via .toISOString() is the standard the API expects.
+**Implementation:** In scheduler.js, create Date objects for start/end of user's day, call .toISOString(), and pass to listEvents without a timezone parameter. The calendar.js listEvents function signature was updated to remove the timeZone argument.
+
 ---

@@ -349,6 +349,9 @@ You're responding in Slack, not Markdown. Use Slack formatting:
 - Code: \`text\` (backticks work the same)
 - Never use ** for bold — that shows as raw text in Slack
 - Never use - for bullet points — use • instead
+
+## SCHEDULE / EVENT LIST FORMATTING
+When listing calendar events (time range + event title), use \` | \` (pipe with spaces) between the time and the event name. Example: \`7:00 - 9:00 AM | P - Morning Routine\`. Do not use • for this — reserve bullets for general list items.
 ${getDateContext(timezone)}`;
 }
 
