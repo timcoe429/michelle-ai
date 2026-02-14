@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const crypto = require('crypto');
 const { handleMessage } = require('./bot');
-const { scheduleDailySummary } = require('./scheduler');
+const { scheduleDailySummary, sendDailySummary } = require('./scheduler');
 
 const app = express();
 
@@ -39,6 +39,17 @@ function verifySlackSignature(req) {
 // Health check
 app.get('/', (req, res) => {
   res.send('Calendar bot is running!');
+});
+
+app.get('/trigger-summary', async (req, res) => {
+  console.log('Manual daily summary trigger');
+  try {
+    await sendDailySummary();
+    res.send('Daily summary triggered');
+  } catch (error) {
+    console.error('Manual trigger error:', error);
+    res.status(500).send(error.message);
+  }
 });
 
 // Slack events endpoint
