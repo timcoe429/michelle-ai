@@ -176,11 +176,7 @@ async function sendUserDailySummary({ userId, calendarId, timezone, dailyChannel
   // Fetch events and weather in parallel
   const eventsPromise = (async () => {
     try {
-      const start = startOfDayDate.toISOString();
-      const end = endOfDayDate.toISOString();
-      console.log('Fetching events:', { calendarId, start, end });
-      const events = await listEvents(calendarId, start, end);
-      console.log('Events returned:', { count: events?.length || 0, events });
+      const events = await listEvents(calendarId, startOfDayDate.toISOString(), endOfDayDate.toISOString());
       return events ?? [];
     } catch (error) {
       console.error('listEvents failed:', error);

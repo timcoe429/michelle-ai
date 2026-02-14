@@ -45,4 +45,8 @@
 **Decision:** Use pipe separator (|) between time and event name in schedule lists, reserve bullets (•) for general list items.
 **Why:** Clearer visual distinction in Slack formatting. System prompt now explicitly instructs Claude to use "7:00 - 9:00 AM | Event Name" format for calendar event lists while keeping bullets for other list types.
 
+## 48-Hour Search Window for Timezone Date Calculations
+**Decision:** Daily summary uses 48-hour UTC search window (day-1 noon through day+1 noon) to find start/end of day in user's timezone.
+**Why:** Previous single-day UTC search failed for timezones west of UTC where 23:59 local time falls on the next UTC day. This produced invalid date ranges (end before start) and zero events from the Google Calendar API.
+
 ---

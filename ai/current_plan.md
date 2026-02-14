@@ -14,9 +14,10 @@
 - Force fresh calendar data on every query
 - Daily summary chronological order fix (timezone-aware date range calculation)
 - Schedule formatting fix (pipe separator instead of bullets for event lists)
+- Fixed daily summary date range bug (timezone calculation)
 
 ### In Progress
-- [ ] Testing daily summary and schedule formatting fixes in production
+- [ ] **Omiah setup** — Needs Google OAuth refresh token configured
 
 ### Blockers
 - None currently
