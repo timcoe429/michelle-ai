@@ -171,7 +171,21 @@ async function sendUserDailySummary({ userId, calendarId, timezone, dailyChannel
   const { startOfDayDate, endOfDayDate } = getStartAndEndOfDayInTimezone(now, timezone);
 
   // Fetch events and weather in parallel
-  const promises = [listEvents(calendarId, startOfDayDate.toISOString(), endOfDayDate.toISOString())];
+  const eventsPromise = (async () => {
+    try {
+      const start = startOfDayDate.toISOString();
+      const end = endOfDayDate.toISOString();
+      console.log('Fetching events:', { calendarId, start, end });
+      const events = await listEvents(calendarId, start, end);
+      console.log('Events returned:', { count: events?.length || 0, events });
+      return events ?? [];
+    } catch (error) {
+      console.error('listEvents failed:', error);
+      return [];
+    }
+  })();
+
+  const promises = [eventsPromise];
   
   // Only fetch weather if location is configured
   if (weatherLocation) {
