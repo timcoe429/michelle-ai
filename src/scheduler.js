@@ -116,11 +116,6 @@ function getStartAndEndOfDayInTimezone(now, timezone) {
     month: '2-digit',
     day: '2-digit'
   });
-  const parts = formatter.formatToParts(now);
-  const year = parseInt(parts.find(p => p.type === 'year').value, 10);
-  const month = parseInt(parts.find(p => p.type === 'month').value, 10) - 1;
-  const day = parseInt(parts.find(p => p.type === 'day').value, 10);
-
   const timeFormatter = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
     hour: '2-digit',
@@ -129,35 +124,43 @@ function getStartAndEndOfDayInTimezone(now, timezone) {
     hour12: false
   });
 
-  // Find UTC instant when it's 00:00:00 in user's timezone
+  const parts = formatter.formatToParts(now);
+  const year = parseInt(parts.find(p => p.type === 'year').value, 10);
+  const month = parseInt(parts.find(p => p.type === 'month').value, 10) - 1;
+  const day = parseInt(parts.find(p => p.type === 'day').value, 10);
+
   let startOfDayDate = null;
-  for (let h = 0; h < 24; h++) {
-    const candidate = new Date(Date.UTC(year, month, day, h, 0, 0, 0));
+  let endOfDayDate = null;
+
+  // Search 48 hours of UTC time to cover all timezones (UTC-12 to UTC+14).
+  // Start at noon UTC on the day before; end at noon UTC on the day after.
+  const searchStart = Date.UTC(year, month, day - 1, 12, 0, 0, 0);
+  const searchEnd = Date.UTC(year, month, day + 1, 12, 0, 0, 0);
+
+  for (let t = searchStart; t <= searchEnd && (!startOfDayDate || !endOfDayDate); t += 60 * 60 * 1000) {
+    const candidate = new Date(t);
+    const dateParts = formatter.formatToParts(candidate);
+    const cYear = parseInt(dateParts.find(p => p.type === 'year').value, 10);
+    const cMonth = parseInt(dateParts.find(p => p.type === 'month').value, 10) - 1;
+    const cDay = parseInt(dateParts.find(p => p.type === 'day').value, 10);
+
+    if (cYear !== year || cMonth !== month || cDay !== day) continue;
+
     const timeParts = timeFormatter.formatToParts(candidate);
     const hour = parseInt(timeParts.find(p => p.type === 'hour').value, 10);
     const min = parseInt(timeParts.find(p => p.type === 'minute').value, 10);
     const sec = parseInt(timeParts.find(p => p.type === 'second').value, 10);
-    if (hour === 0 && min === 0 && sec === 0) {
+
+    if (hour === 0 && min === 0 && sec === 0 && !startOfDayDate) {
       startOfDayDate = candidate;
-      break;
     }
-  }
-  if (!startOfDayDate) {
-    startOfDayDate = new Date(Date.UTC(year, month, day, 12, 0, 0, 0));
+    if (hour === 23 && min === 0 && sec === 0 && !endOfDayDate) {
+      endOfDayDate = new Date(candidate.getTime() + (59 * 60 + 59) * 1000 + 999);
+    }
   }
 
-  // Find UTC instant when it's 23:00:00 in user's timezone, then add 59m59s999ms
-  let endOfDayDate = null;
-  for (let h = 0; h < 24; h++) {
-    const candidate = new Date(Date.UTC(year, month, day, h, 0, 0, 0));
-    const timeParts = timeFormatter.formatToParts(candidate);
-    const hour = parseInt(timeParts.find(p => p.type === 'hour').value, 10);
-    const min = parseInt(timeParts.find(p => p.type === 'minute').value, 10);
-    const sec = parseInt(timeParts.find(p => p.type === 'second').value, 10);
-    if (hour === 23 && min === 0 && sec === 0) {
-      endOfDayDate = new Date(candidate.getTime() + (59 * 60 + 59) * 1000 + 999);
-      break;
-    }
+  if (!startOfDayDate) {
+    startOfDayDate = new Date(Date.UTC(year, month, day, 5, 0, 0, 0));
   }
   if (!endOfDayDate) {
     endOfDayDate = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
